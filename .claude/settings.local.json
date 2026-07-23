@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p docs)",
+      "Bash(mv ARCHITECTURE.md DATABASE.md API.md SECURITY.md UI_UX.md CODING_STANDARD.md TESTING.md DEPLOYMENT.md PROJECT_SCOPE.md PRODUCT_VISION.md IMPLEMENTATION_PLAN.md docs/)",
+      "Bash(where jq *)",
+      "Bash(node *)"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+# GLOSSARY.md — Drink Shop Management System (DSMS)
+
+> คำศัพท์ที่ใช้ซ้ำทั่วทั้งชุดเอกสาร นิยามที่นี่ที่เดียว ห้ามนิยามซ้ำในเอกสารอื่นแบบขัดแย้งกัน
+> ถ้าพบการใช้คำที่ขัดกับที่นี่ในเอกสารไหน ให้แก้เอกสารนั้นให้ตรง ไม่ใช่เพิ่มนิยามใหม่
+
+| คำศัพท์                               | นิยาม                                                                                                                                                                                  |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Base Unit**                         | หน่วยมาตรฐานที่ใช้ในสูตร (recipe) เสมอ มีแค่ 3 ค่า: `gram`, `ml`, `piece` (ดู `DECISIONS.md` D2)                                                                                       |
+| **Purchase Unit**                     | หน่วยที่ซื้อวัตถุดิบจริงจาก supplier เช่น กล่อง/ลัง/ขวด ต้องแปลงเป็น Base Unit ผ่าน `unit_conversions`                                                                                 |
+| **WAC (Weighted Average Cost)**       | วิธีคิดต้นทุนเฉลี่ยถ่วงน้ำหนักของวัตถุดิบ คำนวณใหม่ทุกครั้งที่รับของเข้า (ดู `DECISIONS.md` D1)                                                                                        |
+| **Cost Cascade**                      | ห่วงโซ่การคำนวณต้นทุน: Ingredient cost → Recipe cost → Menu cost แบบ dependency chain ที่ recalculate อัตโนมัติเมื่อต้นทาง (ingredient) เปลี่ยน (ดู `ARCHITECTURE.md` §3)              |
+| **Cost Snapshot**                     | ต้นทุน ณ เวลาที่ขายจริง ที่บันทึกแยกไว้ใน `sales_transaction_items.cost_at_sale_time` ไม่ผูกกับ live cost ปัจจุบัน เพื่อไม่ให้รายงานย้อนหลังผิดเพี้ยน                                  |
+| **Yield**                             | ปริมาณผลผลิตที่ได้จาก 1 สูตร (เช่น สูตรนี้ทำได้ 1 แก้ว หรือ 1 lot ได้ 10 แก้ว) ใช้หารต้นทุนรวมของสูตรเป็นต้นทุนต่อหน่วยขาย                                                             |
+| **Menu Variant**                      | ตัวเลือกที่เปลี่ยนสูตร/ปริมาณของเมนู เช่น Size S/M/L แต่ละ variant มี multiplier หรือ recipe แยก + price_delta (ดู `DECISIONS.md` D3)                                                  |
+| **Modifier / Modifier Group**         | ตัวเลือกเสริมที่ไม่เปลี่ยนสูตรหลัก เช่น topping, ระดับความหวาน, ระดับน้ำแข็ง อาจกินสต็อกวัตถุดิบเพิ่มหรือไม่ก็ได้ (ดู `DECISIONS.md` D3)                                               |
+| **Movement (Inventory Movement)**     | 1 แถวในตาราง `inventory_movements` แทนการเปลี่ยนแปลงสต็อก 1 ครั้ง (in/out/adjustment/reversal) เป็น append-only                                                                        |
+| **Adjustment**                        | การแก้ไขตัวเลขสต็อกที่ไม่มีเอกสารอ้างอิง (ไม่ใช่จากการซื้อ/ขาย) เช่น ของเสีย/นับสต็อกไม่ตรง จำกัดสิทธิ์เฉพาะ Manager/Owner (ดู `DECISIONS.md` D12)                                     |
+| **Reversal**                          | แถวใหม่ที่สร้างขึ้นเพื่อ "ยกเลิก" ผลของแถวเดิมในตาราง append-only (ห้าม UPDATE/DELETE ของเดิม) ใช้ทั้งกับ sales (refund/void) และ inventory                                            |
+| **Append-only / Immutable Ledger**    | หลักการที่ตารางธุรกรรมการเงิน/สต็อกห้าม UPDATE/DELETE แถวที่มีอยู่ การแก้ไขทำผ่านแถว reversal ใหม่เท่านั้น (ดู `ARCHITECTURE.md` §4)                                                   |
+| **Soft-delete**                       | การ "ลบ" ข้อมูล master data (ingredient, recipe, menu) โดยตั้ง `deleted_at` แทนการลบจริง เพราะอาจถูกอ้างอิงจากธุรกรรมเก่า                                                              |
+| **Business Day**                      | ขอบเขต "1 วัน" ทางธุรกิจที่ใช้ group รายงาน ไม่ใช่ calendar day ปกติ กำหนดด้วย `business_day_start_hour` (ดู `DECISIONS.md` D8)                                                        |
+| **RBAC (Role-Based Access Control)**  | การกำหนดสิทธิ์ตามบทบาท (Owner/Manager/Shift Supervisor/Cashier/Employee/Accountant) matrix เต็มอยู่ใน `SECURITY.md` §1                                                                 |
+| **Shift Supervisor**                  | หัวหน้าเวร/หัวหน้ากะ — role ที่ดูแลหน้าร้านเมื่อ Owner/Manager ไม่อยู่ อนุมัติ refund ได้เองไม่เกิน threshold ที่ตั้งไว้ (ดู `DECISIONS.md` D14)                                       |
+| **Accountant**                        | ฝ่ายบัญชี/สำนักงานบัญชีภายนอก — role ที่เห็นเฉพาะ Expense และ Reports การเงิน เพื่อเตรียมยื่นภาษี ไม่มีสิทธิ์เข้า POS/Inventory/Settings (ดู `DECISIONS.md` D14)                       |
+| **PDPA**                              | พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 — กฎหมายไทยที่บังคับใช้จริงตั้งแต่ 1 มิ.ย. 2565 กับทุกธุรกิจที่ประมวลผลข้อมูลส่วนบุคคล รวมถึงข้อมูลพนักงานในระบบนี้ (ดู `DECISIONS.md` D15)    |
+| **ใบกำกับภาษีอย่างย่อ (Tax Invoice)** | เอกสารตามมาตรา 86/6 ประมวลรัษฎากรที่ผู้ประกอบการจด VAT ต้องออกเมื่อขายสินค้า มีข้อมูลบังคับ เช่น เลขผู้เสียภาษี, เลขที่ใบกำกับภาษีต่อเนื่อง (ดู `DECISIONS.md` D16)                    |
+| **Data Retention**                    | ระยะเวลาที่ต้องเก็บข้อมูลธุรกรรม/บัญชีไว้ตามกฎหมาย (≥ 5 ปี ตาม พ.ร.บ.การบัญชี พ.ศ. 2543) ห้ามลบ/purge อัตโนมัติก่อนครบกำหนด (ดู `DECISIONS.md` D17)                                    |
+| **UAT (User Acceptance Testing)**     | การทดสอบโดยผู้ใช้งานจริง (Owner, Cashier, Shift Supervisor) ก่อน sign-off ไป production แยกจาก automated test (ดู `DECISIONS.md` D18)                                                  |
+| **RLS (Row-Level Security)**          | ฟีเจอร์ Postgres ที่จำกัดแถวที่ query เห็นตาม policy ในโปรเจกต์นี้เป็น defense-in-depth สำหรับ "การเข้าถึง DB นอก path แอป" เท่านั้น ไม่ใช่ด่านของ request ปกติ (ดู `DECISIONS.md` D7) |
+| **Void**                              | การยกเลิกการขายภายในกะเดียวกัน ก่อน settlement ทำได้โดย Cashier เอง (ดู `DECISIONS.md` D5)                                                                                             |
+| **Refund**                            | การคืนเงิน/ยกเลิกการขายหลังปิดกะแล้ว — Shift Supervisor อนุมัติได้เองถ้ายอด ≤ threshold มิฉะนั้นต้องผ่าน Manager/Owner (ดู `DECISIONS.md` D5, D14)                                     |
+| **Stock Deficit**                     | สถานะที่ขายสินค้าไปแล้วแต่สต็อกในระบบไม่พอ (ติดลบ) — อนุญาตให้เกิดได้พร้อม flag เตือน ไม่บล็อกการขาย (ดู `DECISIONS.md` D4)                                                            |
+| **Bootstrap Owner**                   | ผู้ใช้คนแรกที่ signup สำเร็จเมื่อระบบยังไม่มี Owner จะได้ role Owner อัตโนมัติ ครั้งเดียว (ดู `DECISIONS.md` D6)                                                                       |
+| **Branch-ready**                      | หลักการที่ทุกตารางธุรกิจมีคอลัมน์ `branch_id` ตั้งแต่ Phase 3 แม้ MVP รองรับสาขาเดียว เพื่อไม่ต้อง breaking change ตอนเปิด multi-branch                                                |
+| **Assumptions Log**                   | บันทึกการตัดสินใจแบบ Soft-Stop ที่ agent/ผู้พัฒนาเดาเอาโดยอิง default (เช่น จาก `UI_UX.md`) ต้องแนบท้าย PR/commit เสมอ (ดู `AGENTS.md` §2)                                             |

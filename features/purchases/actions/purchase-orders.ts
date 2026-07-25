@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { computeWeightedAverageCost } from "@/lib/cost-cascade";
+import { DEFAULT_PAGE_SIZE, getSkip, getTotalPages } from "@/lib/pagination";
 import {
   purchaseOrderSchema,
   PurchaseOrderInput,
@@ -26,11 +27,15 @@ function permissionErrorMessage(e: unknown, fallback: string) {
   throw e;
 }
 
-export async function listPurchaseOrders(filters?: {
-  supplierId?: string;
-  from?: string;
-  to?: string;
-}) {
+export async function listPurchaseOrders(
+  filters?: {
+    supplierId?: string;
+    from?: string;
+    to?: string;
+  },
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE,
+) {
   const actor = await getActor();
   if (!actor) return { error: "กรุณาล็อกอินก่อน" };
 
@@ -40,21 +45,31 @@ export async function listPurchaseOrders(filters?: {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ดูใบสั่งซื้อ") };
   }
 
-  const orders = await prisma.purchaseOrder.findMany({
-    where: {
-      ...(filters?.supplierId ? { supplierId: filters.supplierId } : {}),
-      ...(filters?.from || filters?.to
-        ? {
-            orderedAt: {
-              ...(filters.from ? { gte: new Date(filters.from) } : {}),
-              ...(filters.to ? { lte: new Date(filters.to) } : {}),
-            },
-          }
-        : {}),
-    },
-    include: { supplier: true, items: { include: { ingredient: true } } },
-    orderBy: { orderedAt: "desc" },
-  });
+  const where = {
+    ...(filters?.supplierId ? { supplierId: filters.supplierId } : {}),
+    ...(filters?.from || filters?.to
+      ? {
+          orderedAt: {
+            ...(filters.from ? { gte: new Date(filters.from) } : {}),
+            ...(filters.to ? { lte: new Date(filters.to) } : {}),
+          },
+        }
+      : {}),
+  };
+
+  const [orders, total, pendingCount] = await prisma.$transaction([
+    prisma.purchaseOrder.findMany({
+      where,
+      include: { supplier: true, items: { include: { ingredient: true } } },
+      orderBy: { orderedAt: "desc" },
+      skip: getSkip(page, pageSize),
+      take: pageSize,
+    }),
+    prisma.purchaseOrder.count({ where }),
+    // Counted independently of the paginated page/window so the "pending"
+    // banner reflects the whole filtered set, not just what's on screen.
+    prisma.purchaseOrder.count({ where: { ...where, status: "pending" } }),
+  ]);
 
   return {
     orders: orders.map((o) => ({
@@ -73,6 +88,10 @@ export async function listPurchaseOrders(filters?: {
         unitPrice: it.unitPrice.toString(),
       })),
     })),
+    total,
+    page,
+    totalPages: getTotalPages(total, pageSize),
+    pendingCount,
   };
 }
 

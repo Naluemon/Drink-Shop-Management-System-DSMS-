@@ -6,6 +6,7 @@ import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { getOrCreateCompanySettings } from "@/lib/settings";
 import { resolveStockDeficitPolicy, StockDeficitBlockedError } from "@/lib/stock-deficit-policy";
+import { DEFAULT_PAGE_SIZE, getSkip, getTotalPages } from "@/lib/pagination";
 import {
   stockInSchema,
   StockInInput,
@@ -203,7 +204,7 @@ export async function recordAdjustment(input: AdjustmentInput) {
 // Movement log — matches SECURITY.md §1's Inventory rows: only Owner/Manager
 // have anything beyond bare "Create" on stock_in/stock_out/adjustment, so
 // only they get to browse the ledger itself.
-export async function listRecentMovements(limit = 20) {
+export async function listRecentMovements(page = 1, pageSize = DEFAULT_PAGE_SIZE) {
   const actor = await getActor();
   if (!actor) return { error: "กรุณาล็อกอินก่อน" };
 
@@ -212,11 +213,15 @@ export async function listRecentMovements(limit = 20) {
     return { error: "คุณไม่มีสิทธิ์ดูประวัติการเคลื่อนไหวสต็อก" };
   }
 
-  const movements = await prisma.inventoryMovement.findMany({
-    take: limit,
-    orderBy: { createdAt: "desc" },
-    include: { ingredient: true },
-  });
+  const [movements, total] = await prisma.$transaction([
+    prisma.inventoryMovement.findMany({
+      skip: getSkip(page, pageSize),
+      take: pageSize,
+      orderBy: { createdAt: "desc" },
+      include: { ingredient: true },
+    }),
+    prisma.inventoryMovement.count(),
+  ]);
 
   return {
     movements: movements.map((m) => ({
@@ -229,5 +234,8 @@ export async function listRecentMovements(limit = 20) {
       isStockDeficit: m.isStockDeficit,
       createdAt: m.createdAt.toISOString(),
     })),
+    total,
+    page,
+    totalPages: getTotalPages(total, pageSize),
   };
 }

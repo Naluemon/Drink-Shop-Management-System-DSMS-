@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { receivePurchaseOrder, cancelPurchaseOrder } from "../actions/purchase-orders";
 import { PurchaseOrderFormDialog, type NewPurchaseOrder } from "./purchase-order-form-dialog";
@@ -24,7 +25,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PaginationControls } from "@/components/pagination-controls";
 import { formatBaht } from "@/lib/utils";
+import { DEFAULT_PAGE_SIZE, getSkip } from "@/lib/pagination";
 
 export interface PurchaseOrderRow extends Omit<NewPurchaseOrder, "receivedAt"> {
   receivedAt: string | null;
@@ -36,10 +39,15 @@ interface SupplierOption {
 }
 
 interface PurchaseOrderListProps {
-  initialOrders: PurchaseOrderRow[];
+  orders: PurchaseOrderRow[];
   suppliers: SupplierOption[];
   availableIngredients: IngredientWithUnits[];
   canEdit: boolean;
+  supplierFilter?: string;
+  pendingCount: number;
+  page: number;
+  totalPages: number;
+  total: number;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -50,39 +58,51 @@ const STATUS_LABELS: Record<string, string> = {
 
 const ALL_SUPPLIERS = "__all__";
 
-// FR-PUR-02/03/04: สร้าง PO, Receive (trigger WAC), ดูประวัติแยกตาม supplier
+// FR-PUR-02/03/04: สร้าง PO, Receive (trigger WAC), ดูประวัติแยกตาม supplier.
+// `orders` is one page fetched server-side (features/purchases/actions/purchase-orders.ts)
+// — the supplier filter navigates (re-fetches from the server); the search box
+// only narrows what's already on this page, since searching the full history
+// server-side would defeat the point of paginating it.
 export function PurchaseOrderList({
-  initialOrders,
+  orders,
   suppliers,
   availableIngredients,
   canEdit,
+  supplierFilter,
+  pendingCount,
+  page,
+  totalPages,
+  total,
 }: PurchaseOrderListProps) {
-  const [orders, setOrders] = useState(initialOrders);
+  const router = useRouter();
   const [search, setSearch] = useState("");
-  const [supplierFilter, setSupplierFilter] = useState(ALL_SUPPLIERS);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Matches supplier name, status label, or order total — searching "890"
-  // finds every PO around that total just as readily as the supplier name would.
   const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return orders;
     return orders.filter((o) => {
-      if (supplierFilter !== ALL_SUPPLIERS && o.supplierId !== supplierFilter) return false;
-      const term = search.trim().toLowerCase();
-      if (!term) return true;
-      const total = o.items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unitPrice), 0);
+      const orderTotal = o.items.reduce(
+        (sum, i) => sum + Number(i.quantity) * Number(i.unitPrice),
+        0,
+      );
       return (
         o.supplierName.toLowerCase().includes(term) ||
         (STATUS_LABELS[o.status] ?? o.status).toLowerCase().includes(term) ||
-        total.toFixed(2).includes(term)
+        orderTotal.toFixed(2).includes(term)
       );
     });
-  }, [orders, search, supplierFilter]);
+  }, [orders, search]);
 
-  const pendingCount = useMemo(() => orders.filter((o) => o.status === "pending").length, [orders]);
+  function handleSupplierFilterChange(value: string) {
+    const params = new URLSearchParams();
+    if (value !== ALL_SUPPLIERS) params.set("supplier", value);
+    startTransition(() => router.push(`/purchases?${params.toString()}`));
+  }
 
-  function handleCreated(order: NewPurchaseOrder) {
-    setOrders((prev) => [{ ...order, receivedAt: null }, ...prev]);
+  function handleCreated(_order: NewPurchaseOrder) {
+    startTransition(() => router.refresh());
   }
 
   function handleReceive(id: string) {
@@ -94,12 +114,8 @@ export function PurchaseOrderList({
         toast.error(result.error);
         return;
       }
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === id ? { ...o, status: "received", receivedAt: new Date().toISOString() } : o,
-        ),
-      );
       toast.success("รับของเข้าสต็อกสำเร็จ");
+      router.refresh();
     });
   }
 
@@ -112,8 +128,8 @@ export function PurchaseOrderList({
         toast.error(result.error);
         return;
       }
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "cancelled" } : o)));
       toast.success("ยกเลิกใบสั่งซื้อสำเร็จ");
+      router.refresh();
     });
   }
 
@@ -128,8 +144,8 @@ export function PurchaseOrderList({
             className="max-w-xs"
           />
           <Select
-            value={supplierFilter}
-            onValueChange={(v) => setSupplierFilter(v ?? ALL_SUPPLIERS)}
+            value={supplierFilter ?? ALL_SUPPLIERS}
+            onValueChange={(v) => handleSupplierFilterChange(v ?? ALL_SUPPLIERS)}
           >
             <SelectTrigger className="w-56">
               <SelectValue>
@@ -167,7 +183,11 @@ export function PurchaseOrderList({
         </div>
       )}
 
-      <p className="text-muted-foreground text-sm">ทั้งหมด {filtered.length} รายการ</p>
+      <p className="text-muted-foreground text-sm">
+        {search.trim()
+          ? `พบ ${filtered.length} จาก ${orders.length} รายการในหน้านี้`
+          : `ในหน้านี้ ${orders.length} รายการ (ทั้งหมด ${total} รายการ)`}
+      </p>
 
       <Table>
         <TableHeader>
@@ -190,19 +210,21 @@ export function PurchaseOrderList({
             </TableRow>
           ) : (
             filtered.map((o, index) => {
-              const total = o.items.reduce(
+              const orderTotal = o.items.reduce(
                 (sum, i) => sum + Number(i.quantity) * Number(i.unitPrice),
                 0,
               );
               return (
                 <TableRow key={o.id}>
-                  <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {getSkip(page, DEFAULT_PAGE_SIZE) + index + 1}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-xs">
                     {new Date(o.orderedAt).toLocaleDateString("th-TH")}
                   </TableCell>
                   <TableCell className="font-medium">{o.supplierName}</TableCell>
                   <TableCell>{o.items.length} รายการ</TableCell>
-                  <TableCell>{formatBaht(total)}</TableCell>
+                  <TableCell>{formatBaht(orderTotal)}</TableCell>
                   <TableCell>
                     <Badge
                       variant={
@@ -247,6 +269,14 @@ export function PurchaseOrderList({
           )}
         </TableBody>
       </Table>
+
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        basePath="/purchases"
+        searchParams={{ supplier: supplierFilter }}
+      />
     </div>
   );
 }

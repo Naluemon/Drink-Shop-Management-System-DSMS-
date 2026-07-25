@@ -7,10 +7,20 @@ import { listIngredients } from "@/features/ingredients/actions/ingredients";
 import { AppShell } from "@/components/app-shell";
 import { PurchaseOrderList } from "@/features/purchases/components/purchase-order-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { parsePageParam } from "@/lib/pagination";
 
 // Phase 7 — Purchase. SECURITY.md §1: Owner/Manager CRUD, Shift Supervisor
 // view-only, others no access.
-export default async function PurchasesPage() {
+export default async function PurchasesPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const searchParams = await props.searchParams;
+  const page = parsePageParam(searchParams.page);
+  const supplierFilter =
+    typeof searchParams.supplier === "string" && searchParams.supplier
+      ? searchParams.supplier
+      : undefined;
+
   const profile = await getProfile();
   if (profile.error || !profile.user) {
     redirect("/login");
@@ -22,7 +32,7 @@ export default async function PurchasesPage() {
   }
 
   const [ordersResult, suppliersResult, ingredientsResult] = await Promise.all([
-    listPurchaseOrders(),
+    listPurchaseOrders({ supplierId: supplierFilter }, page),
     listSuppliers(),
     listIngredients(),
   ]);
@@ -69,10 +79,15 @@ export default async function PurchasesPage() {
           </CardHeader>
           <CardContent>
             <PurchaseOrderList
-              initialOrders={orders}
+              orders={orders}
               suppliers={suppliers}
               availableIngredients={availableIngredients}
               canEdit={canEdit}
+              supplierFilter={supplierFilter}
+              pendingCount={ordersResult.pendingCount ?? 0}
+              page={ordersResult.page ?? 1}
+              totalPages={ordersResult.totalPages ?? 1}
+              total={ordersResult.total ?? 0}
             />
           </CardContent>
         </Card>

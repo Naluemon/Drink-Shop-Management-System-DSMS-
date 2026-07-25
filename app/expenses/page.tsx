@@ -1,15 +1,29 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
-import { listExpenseCategories, listExpenseEntries } from "@/features/expense/actions/expense";
+import {
+  listExpenseCategories,
+  listExpenseEntries,
+  getExpenseCategoryTotals,
+} from "@/features/expense/actions/expense";
 import { AppShell } from "@/components/app-shell";
 import { ExpensePageContent } from "@/features/expense/components/expense-page-content";
+import { parsePageParam } from "@/lib/pagination";
 
 // Phase 9 — Expense. SECURITY.md §1 / DECISIONS.md D14: Owner (CRUD),
 // Manager/Accountant (create/view เท่านั้น) — Shift Supervisor/Cashier/
 // Employee ไม่มีสิทธิ์เข้าหน้านี้เลย (ไม่มี key "expense" ของ role เหล่านั้น
 // ในเมทริกซ์ lib/permissions.ts)
-export default async function ExpensesPage() {
+export default async function ExpensesPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const searchParams = await props.searchParams;
+  const page = parsePageParam(searchParams.page);
+  const categoryFilter =
+    typeof searchParams.category === "string" && searchParams.category
+      ? searchParams.category
+      : undefined;
+
   const profile = await getProfile();
   if (profile.error || !profile.user) {
     redirect("/login");
@@ -20,9 +34,10 @@ export default async function ExpensesPage() {
     redirect("/dashboard");
   }
 
-  const [categoriesResult, entriesResult] = await Promise.all([
+  const [categoriesResult, entriesResult, totalsResult] = await Promise.all([
     listExpenseCategories(),
-    listExpenseEntries(),
+    listExpenseEntries({ categoryId: categoryFilter }, page),
+    getExpenseCategoryTotals(),
   ]);
 
   if (categoriesResult.error || entriesResult.error) {
@@ -44,8 +59,14 @@ export default async function ExpensesPage() {
         <ExpensePageContent
           categories={categoriesResult.categories ?? []}
           entries={entriesResult.entries ?? []}
+          categoryTotals={totalsResult.totals ?? []}
+          grandTotal={totalsResult.grandTotal ?? 0}
           canManageCategories={role === "owner"}
           canAdjust={role === "owner"}
+          categoryFilter={categoryFilter}
+          page={entriesResult.page ?? 1}
+          totalPages={entriesResult.totalPages ?? 1}
+          total={entriesResult.total ?? 0}
         />
       </div>
     </AppShell>

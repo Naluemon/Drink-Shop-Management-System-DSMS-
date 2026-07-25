@@ -27,7 +27,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PaginationControls } from "@/components/pagination-controls";
 import { formatBaht } from "@/lib/utils";
+import { DEFAULT_PAGE_SIZE, getSkip } from "@/lib/pagination";
 
 const ALL_CATEGORIES = "__all__";
 
@@ -60,57 +62,72 @@ async function handleViewSlip(entryId: string) {
   tab.location.href = result.url;
 }
 
+interface CategoryTotalRow {
+  categoryId: string;
+  categoryName: string;
+  net: number;
+}
+
 interface ExpensePageContentProps {
   categories: CategoryRow[];
   entries: ExpenseEntryRow[];
+  categoryTotals: CategoryTotalRow[];
+  grandTotal: number;
   canManageCategories: boolean;
   canAdjust: boolean;
+  categoryFilter?: string;
+  page: number;
+  totalPages: number;
+  total: number;
 }
 
 // Phase 9 — Expense. FR-EXP-01/02/03: หมวดหมู่ + รายการค่าใช้จ่าย append-only +
 // การแก้ไขทำผ่านรายการปรับปรุงใหม่เท่านั้น สรุปยอดสุทธิต่อหมวดหมู่ (รวม
-// รายการปรับปรุง) ให้เห็นผลกระทบต่อกำไร-ขาดทุนทันที ตาม Acceptance Criteria
+// รายการปรับปรุง) ให้เห็นผลกระทบต่อกำไร-ขาดทุนทันที ตาม Acceptance Criteria.
+// `entries` is one page (features/expense/actions/expense.ts) — the search
+// box only narrows what's already on this page; `categoryTotals`/`grandTotal`
+// are computed server-side across the WHOLE ledger so they stay correct
+// regardless of which page is showing.
 export function ExpensePageContent({
   categories,
   entries,
+  categoryTotals,
+  grandTotal,
   canManageCategories,
   canAdjust,
+  categoryFilter,
+  page,
+  totalPages,
+  total,
 }: ExpensePageContentProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES);
 
   function handleChanged() {
     startTransition(() => router.refresh());
   }
 
+  function handleCategoryFilterChange(value: string) {
+    const params = new URLSearchParams();
+    if (value !== ALL_CATEGORIES) params.set("category", value);
+    startTransition(() => router.push(`/expenses?${params.toString()}`));
+  }
+
   // Matches description, category, or amount — searching "500" finds every
   // entry near that amount just as readily as typing the category would.
+  // Scoped to the current page only (see file header note).
   const filteredEntries = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return entries;
     return entries.filter((e) => {
-      if (categoryFilter !== ALL_CATEGORIES && e.categoryId !== categoryFilter) return false;
-      const term = search.trim().toLowerCase();
-      if (!term) return true;
       return (
         (e.description ?? "").toLowerCase().includes(term) ||
         e.categoryName.toLowerCase().includes(term) ||
         e.amount.includes(term)
       );
     });
-  }, [entries, search, categoryFilter]);
-
-  const categoryTotals = useMemo(() => {
-    const totals = new Map<string, { name: string; net: number }>();
-    for (const e of entries) {
-      const prev = totals.get(e.categoryId) ?? { name: e.categoryName, net: 0 };
-      prev.net += Number(e.amount);
-      totals.set(e.categoryId, prev);
-    }
-    return Array.from(totals.values()).sort((a, b) => b.net - a.net);
-  }, [entries]);
-
-  const grandTotal = categoryTotals.reduce((sum, c) => sum + c.net, 0);
+  }, [entries, search]);
 
   return (
     <div className="space-y-6">
@@ -142,8 +159,8 @@ export function ExpensePageContent({
               </TableHeader>
               <TableBody>
                 {categoryTotals.map((c) => (
-                  <TableRow key={c.name}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
+                  <TableRow key={c.categoryId}>
+                    <TableCell className="font-medium">{c.categoryName}</TableCell>
                     <TableCell>{formatBaht(c.net)}</TableCell>
                   </TableRow>
                 ))}
@@ -162,7 +179,9 @@ export function ExpensePageContent({
           <div>
             <CardTitle className="text-base">รายการค่าใช้จ่าย</CardTitle>
             <p className="text-muted-foreground mt-1 text-sm">
-              ทั้งหมด {filteredEntries.length} รายการ
+              {search.trim()
+                ? `พบ ${filteredEntries.length} จาก ${entries.length} รายการในหน้านี้`
+                : `ในหน้านี้ ${entries.length} รายการ (ทั้งหมด ${total} รายการ)`}
             </p>
           </div>
           <ExpenseEntryDialog categories={categories} onRecorded={handleChanged} />
@@ -177,8 +196,8 @@ export function ExpensePageContent({
             />
             {categories.length > 0 && (
               <Select
-                value={categoryFilter}
-                onValueChange={(v) => setCategoryFilter(v ?? ALL_CATEGORIES)}
+                value={categoryFilter ?? ALL_CATEGORIES}
+                onValueChange={(v) => handleCategoryFilterChange(v ?? ALL_CATEGORIES)}
               >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="ทุกหมวดหมู่">
@@ -228,7 +247,9 @@ export function ExpensePageContent({
                   const value = Number(e.amount);
                   return (
                     <TableRow key={e.id}>
-                      <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {getSkip(page, DEFAULT_PAGE_SIZE) + index + 1}
+                      </TableCell>
                       <TableCell className="text-muted-foreground text-xs">
                         {new Date(e.createdAt).toLocaleString("th-TH")}
                       </TableCell>
@@ -268,6 +289,14 @@ export function ExpensePageContent({
               )}
             </TableBody>
           </Table>
+
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            basePath="/expenses"
+            searchParams={{ category: categoryFilter }}
+          />
         </CardContent>
       </Card>
     </div>

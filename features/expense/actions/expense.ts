@@ -6,6 +6,7 @@ import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { uploadExpenseSlip, getExpenseSlipSignedUrl } from "@/lib/expense-slip-storage";
 import { extractSlipData } from "@/lib/expense-slip-ocr";
+import { DEFAULT_PAGE_SIZE, getSkip, getTotalPages } from "@/lib/pagination";
 import {
   expenseCategorySchema,
   ExpenseCategoryInput,
@@ -214,7 +215,11 @@ export async function getExpenseSlipUrl(entryId: string) {
   return { url };
 }
 
-export async function listExpenseEntries(filters?: { categoryId?: string }) {
+export async function listExpenseEntries(
+  filters?: { categoryId?: string },
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE,
+) {
   const actor = await getActor();
   if (!actor) return { error: "กรุณาล็อกอินก่อน" };
 
@@ -224,13 +229,20 @@ export async function listExpenseEntries(filters?: { categoryId?: string }) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ดูรายการค่าใช้จ่าย") };
   }
 
-  const entries = await prisma.expenseEntry.findMany({
-    where: {
-      ...(filters?.categoryId ? { categoryId: filters.categoryId } : {}),
-    },
-    include: { category: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const where = {
+    ...(filters?.categoryId ? { categoryId: filters.categoryId } : {}),
+  };
+
+  const [entries, total] = await prisma.$transaction([
+    prisma.expenseEntry.findMany({
+      where,
+      include: { category: true },
+      orderBy: { createdAt: "desc" },
+      skip: getSkip(page, pageSize),
+      take: pageSize,
+    }),
+    prisma.expenseEntry.count({ where }),
+  ]);
 
   return {
     entries: entries.map((e) => ({
@@ -243,6 +255,46 @@ export async function listExpenseEntries(filters?: { categoryId?: string }) {
       reversalOfId: e.reversalOfId,
       createdAt: e.createdAt.toISOString(),
     })),
+    total,
+    page,
+    totalPages: getTotalPages(total, pageSize),
+  };
+}
+
+// Net total per category across the WHOLE ledger (not just the current
+// page) — powers the "สรุปยอดสุทธิตามหมวดหมู่" summary card, which must stay
+// correct regardless of which page of listExpenseEntries is on screen.
+export async function getExpenseCategoryTotals() {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "view", "expense");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ดูรายการค่าใช้จ่าย") };
+  }
+
+  const grouped = await prisma.expenseEntry.groupBy({
+    by: ["categoryId"],
+    _sum: { amount: true },
+  });
+
+  const categories = await prisma.expenseCategory.findMany({
+    where: { id: { in: grouped.map((g) => g.categoryId) } },
+  });
+  const nameById = new Map(categories.map((c) => [c.id, c.name]));
+
+  const totals = grouped
+    .map((g) => ({
+      categoryId: g.categoryId,
+      categoryName: nameById.get(g.categoryId) ?? "—",
+      net: Number(g._sum.amount ?? 0),
+    }))
+    .sort((a, b) => b.net - a.net);
+
+  return {
+    totals,
+    grandTotal: totals.reduce((sum, t) => sum + t.net, 0),
   };
 }
 

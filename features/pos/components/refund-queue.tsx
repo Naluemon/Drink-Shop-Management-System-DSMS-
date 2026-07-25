@@ -67,7 +67,11 @@ export function RefundQueue({ initialRequests, threshold, canApproveAny }: Refun
         <p className="text-muted-foreground text-sm">ไม่มีคำขอคืนเงินค้างอยู่</p>
       ) : (
         requests.map((r) => (
-          <div key={r.id} className="border-border/60 rounded-lg border p-3 text-sm">
+          <div
+            key={r.id}
+            data-testid="refund-request-row"
+            className="border-border/60 rounded-lg border p-3 text-sm"
+          >
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="font-medium">

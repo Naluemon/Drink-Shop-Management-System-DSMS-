@@ -137,12 +137,22 @@ export function VariantManager({
       <div className="space-y-2 rounded-lg border p-3">
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
-            <Label className="text-xs">ชื่อ variant</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Size L" />
+            <Label htmlFor="variant-name" className="text-xs">
+              ชื่อ variant
+            </Label>
+            <Input
+              id="variant-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Size L"
+            />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">ส่วนต่างราคา (บาท)</Label>
+            <Label htmlFor="variant-price-delta" className="text-xs">
+              ส่วนต่างราคา (บาท)
+            </Label>
             <Input
+              id="variant-price-delta"
               type="number"
               step="0.01"
               value={priceDelta}
@@ -152,9 +162,11 @@ export function VariantManager({
         </div>
 
         <div className="space-y-1">
-          <Label className="text-xs">วิธีคำนวณต้นทุน</Label>
+          <Label htmlFor="variant-mode" className="text-xs">
+            วิธีคำนวณต้นทุน
+          </Label>
           <Select value={mode} onValueChange={(v) => setMode((v ?? "multiplier") as typeof mode)}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="variant-mode" className="w-full">
               <SelectValue>
                 {(v: string) => (v === "override" ? "ใช้สูตรทดแทนทั้งหมด" : "คูณสูตรหลัก")}
               </SelectValue>
@@ -168,8 +180,11 @@ export function VariantManager({
 
         {mode === "multiplier" ? (
           <div className="space-y-1">
-            <Label className="text-xs">ตัวคูณสูตรหลัก</Label>
+            <Label htmlFor="variant-multiplier" className="text-xs">
+              ตัวคูณสูตรหลัก
+            </Label>
             <Input
+              id="variant-multiplier"
               type="number"
               step="0.01"
               min="0.01"
@@ -179,9 +194,11 @@ export function VariantManager({
           </div>
         ) : (
           <div className="space-y-1">
-            <Label className="text-xs">สูตรทดแทน</Label>
+            <Label htmlFor="variant-override-recipe" className="text-xs">
+              สูตรทดแทน
+            </Label>
             <Select value={overrideRecipeId} onValueChange={(v) => setOverrideRecipeId(v ?? "")}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger id="variant-override-recipe" className="w-full">
                 <SelectValue placeholder="เลือกสูตร">
                   {(v: string) => availableRecipes.find((r) => r.id === v)?.name ?? "เลือกสูตร"}
                 </SelectValue>

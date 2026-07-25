@@ -80,9 +80,11 @@ export function CostPreview({
 
       {variants.length > 0 && (
         <div className="space-y-1">
-          <Label className="text-xs">Variant</Label>
+          <Label htmlFor="cost-preview-variant" className="text-xs">
+            Variant
+          </Label>
           <Select value={variantId} onValueChange={(v) => setVariantId(v ?? BASE_VARIANT)}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="cost-preview-variant" className="w-full">
               <SelectValue>
                 {(v: string) =>
                   v === BASE_VARIANT

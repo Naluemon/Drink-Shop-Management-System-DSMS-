@@ -4,8 +4,15 @@
 // Connection URL lives in prisma.config.ts + .env (DATABASE_URL) — Prisma 7 driver-adapter workflow, see lib/prisma.ts.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../lib/generated/prisma"
+  // Default ESM output uses `import.meta.url` internally, which crashes any
+  // consumer that loads it through a CJS transform — Playwright's e2e test
+  // runner does this (unlike Next.js's bundler or tsx, which both handle ESM
+  // fine), so every e2e spec that touched the real Prisma client failed at
+  // import time with "Cannot use 'import.meta' outside a module". CJS output
+  // works everywhere.
+  moduleFormat = "cjs"
 }
 
 datasource db {

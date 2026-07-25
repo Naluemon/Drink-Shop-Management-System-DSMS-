@@ -62,6 +62,7 @@ function KpiCard({
   value,
   delta,
   accentColor,
+  testId,
 }: {
   title: string;
   value: string;
@@ -70,6 +71,7 @@ function KpiCard({
   // metric uses in the trend/breakdown charts below, so a KPI card and its
   // matching chart line are recognizable as "the same thing" at a glance.
   accentColor?: string;
+  testId?: string;
 }) {
   return (
     <Card className="border-l-4" style={accentColor ? { borderLeftColor: accentColor } : undefined}>
@@ -77,7 +79,9 @@ function KpiCard({
         <CardTitle className="text-muted-foreground text-sm font-medium">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="font-heading text-2xl font-semibold">{value}</div>
+        <div className="font-heading text-2xl font-semibold" data-testid={testId}>
+          {value}
+        </div>
         {delta && <div className="mt-1">{delta}</div>}
       </CardContent>
     </Card>
@@ -111,6 +115,7 @@ export function DashboardContent({
           value={formatBaht(today.revenue)}
           delta={<DeltaBadge current={today.revenue} previous={yesterday.revenue} />}
           accentColor="var(--chart-1)"
+          testId="kpi-revenue-today"
         />
         <KpiCard
           title="กำไรขั้นต้น (Profit)"

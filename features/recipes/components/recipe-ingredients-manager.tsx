@@ -118,9 +118,11 @@ export function RecipeIngredientsManager({
       {/* div, not <form> — nested inside the recipe's own <form> */}
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1">
-          <Label className="text-xs">วัตถุดิบ</Label>
+          <Label htmlFor="recipe-ingredient-select" className="text-xs">
+            วัตถุดิบ
+          </Label>
           <Select value={ingredientId} onValueChange={(v) => setIngredientId(v ?? "")}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="recipe-ingredient-select" className="w-full">
               <SelectValue placeholder="เลือกวัตถุดิบ">
                 {(v: string) =>
                   availableIngredients.find((i) => i.id === v)?.name ?? "เลือกวัตถุดิบ"
@@ -137,10 +139,11 @@ export function RecipeIngredientsManager({
           </Select>
         </div>
         <div className="w-32 space-y-1">
-          <Label className="text-xs">
+          <Label htmlFor="recipe-ingredient-qty" className="text-xs">
             ปริมาณ{selected ? ` (${BASE_UNIT_LABELS[selected.baseUnit] ?? selected.baseUnit})` : ""}
           </Label>
           <Input
+            id="recipe-ingredient-qty"
             type="number"
             step="0.0001"
             min="0"

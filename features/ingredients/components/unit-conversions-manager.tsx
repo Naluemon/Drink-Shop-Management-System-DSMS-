@@ -110,12 +110,22 @@ export function UnitConversionsManager({
         }}
       >
         <div className="flex-1 space-y-1">
-          <Label className="text-xs">ชื่อหน่วยซื้อ</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="กล่อง 946ml" />
+          <Label htmlFor="unitconv-name" className="text-xs">
+            ชื่อหน่วยซื้อ
+          </Label>
+          <Input
+            id="unitconv-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="กล่อง 946ml"
+          />
         </div>
         <div className="w-32 space-y-1">
-          <Label className="text-xs">= กี่{BASE_UNIT_LABELS[baseUnit] ?? baseUnit}</Label>
+          <Label htmlFor="unitconv-factor" className="text-xs">
+            = กี่{BASE_UNIT_LABELS[baseUnit] ?? baseUnit}
+          </Label>
           <Input
+            id="unitconv-factor"
             type="number"
             step="0.0001"
             min="0"

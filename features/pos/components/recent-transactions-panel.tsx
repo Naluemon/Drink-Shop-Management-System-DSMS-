@@ -78,6 +78,7 @@ export function RecentTransactionsPanel({ initialTransactions }: RecentTransacti
       {transactions.map((t) => (
         <div
           key={t.id}
+          data-testid="recent-transaction-row"
           className="border-border/60 flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
         >
           <div>

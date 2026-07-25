@@ -85,12 +85,13 @@ export function MenuFormDialog({
   const [imageUrl, setImageUrl] = useState(initialValues?.imageUrl ?? "");
   const [isAvailable, setIsAvailable] = useState(initialValues?.isAvailable ?? true);
   const [variants, setVariants] = useState(initialValues?.variants ?? []);
+  const [modifierGroupIds, setModifierGroupIds] = useState(initialValues?.modifierGroupIds ?? []);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const selectedRecipe = availableRecipes.find((r) => r.id === recipeId);
   const selectedModifierGroups = availableModifierGroups.filter((g) =>
-    (initialValues?.modifierGroupIds ?? []).includes(g.id),
+    modifierGroupIds.includes(g.id),
   );
 
   function handleSubmit(e: React.FormEvent) {
@@ -274,6 +275,7 @@ export function MenuFormDialog({
                 menuId={initialValues.id}
                 availableGroups={availableModifierGroups}
                 initialSelectedIds={initialValues.modifierGroupIds}
+                onChange={setModifierGroupIds}
               />
 
               {selectedRecipe && (

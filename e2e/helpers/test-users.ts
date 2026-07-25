@@ -47,6 +47,24 @@ export async function createTestUser(role: UserRole): Promise<TestUser> {
 
 export async function deleteTestUser(user: TestUser): Promise<void> {
   const admin = createAdminClient();
+  // UserInvite.invitedById has no cascade delete — a test user who sent any
+  // invites (see e2e/invite-flow.spec.ts) would otherwise leave this delete
+  // failing on a foreign key violation.
+  await prisma.userInvite.deleteMany({ where: { invitedById: user.id } });
+  await prisma.user.deleteMany({ where: { id: user.id } });
+  await admin.auth.admin.deleteUser(user.id).catch(() => {
+    // best-effort — don't fail teardown if already gone
+  });
+}
+
+// For users created through the real invite-accept flow (not createTestUser)
+// — the public.users row (and its Supabase Auth counterpart) only exists
+// after acceptInvite() runs client-side, so there's no id to track up front.
+export async function deleteUserByEmail(email: string): Promise<void> {
+  const admin = createAdminClient();
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return;
+  await prisma.userInvite.deleteMany({ where: { invitedById: user.id } });
   await prisma.user.deleteMany({ where: { id: user.id } });
   await admin.auth.admin.deleteUser(user.id).catch(() => {
     // best-effort — don't fail teardown if already gone

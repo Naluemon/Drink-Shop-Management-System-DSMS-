@@ -55,14 +55,15 @@ Changed models — add a required `organizationId` FK to each:
 - `UserInvite.organizationId` — invites are scoped to the org that sent them; accepting one creates a `User` in that same org.
 - `CompanySettings.organizationId` (unique) — was a singleton row; becomes one row per org.
 - `TaxSettings.organizationId` (unique) — same.
+- `ReasonCode.organizationId` — found during planning: unlike the other business tables, `ReasonCode` has no `branch_id` at all today. It's a system-wide singleton list (like `CompanySettings`), not something that inherits scope through `Branch`, so it needs the same direct treatment.
 
-**No schema change needed** for the 18 business tables that already carry `branch_id` (`Ingredient`, `Recipe`, `Menu`, `MenuVariant`, `ModifierGroup`, `Modifier`, `PurchaseOrder`, `InventoryMovement`, `SalesTransaction`, `RefundRequest`, `ExpenseCategory`, `ExpenseEntry`, `Supplier`, `ReasonCode`, etc.) — they inherit organization scope transitively once `Branch.organizationId` exists, because every one of them already points at a `Branch`. This is the main reason the schema-migration surface is smaller than "add org_id to every table."
+**No schema change needed** for the 11 business tables that already carry `branch_id` directly (`Supplier`, `Ingredient`, `Recipe`, `MenuCategory`, `Menu`, `ModifierGroup`, `PurchaseOrder`, `InventoryMovement`, `SalesTransaction`, `ExpenseCategory`, `ExpenseEntry`), nor for the 9 child tables that inherit scope by joining to one of those (`UnitConversion`, `RecipeIngredient`, `MenuVariant`, `Modifier`, `PurchaseOrderItem`, `MenuModifierGroup`, `SalesTransactionItem`, `SalesTransactionItemModifier`, `RefundRequest`) — they inherit organization scope transitively once `Branch.organizationId` exists, because every one of them already points (directly or via a parent) at a `Branch`. This is the main reason the schema-migration surface is smaller than "add org_id to every table."
 
 ## 4. Isolation enforcement — two layers
 
 ### Layer 1: Application code
 
-Every action file currently has its own copy-pasted `getActor()` helper that resolves the logged-in Supabase user to a Prisma `User` row. This gets consolidated into one shared helper (e.g. `lib/actor.ts`) that also resolves and returns `organizationId` and the caller's accessible `branchId`s.
+Every action file currently has its own copy-pasted `getActor()` helper that resolves the logged-in Supabase user to a Prisma `User` row. This gets consolidated into one shared helper (`lib/tenant-scope.ts`) that also resolves and returns `organizationId` and the caller's `branchId`.
 
 Every Prisma query in `features/*/actions/*.ts` that reads, counts, updates, or deletes a branch-scoped or org-scoped row must filter by that resolved scope. This is the bulk of the mechanical work: touching every `findMany`, `findFirst`, `count`, `update`, and `delete` call across all ~13 action files (`ingredients.ts`, `suppliers.ts`, `menus.ts`, `modifier-groups.ts`, `recipes.ts`, `inventory.ts`, `purchase-orders.ts`, `expense.ts`, `checkout.ts`, `void-refund.ts`, `pos-menu.ts`, `reports.ts`, `dashboard.ts`, `company-settings.ts`, `manage-users.ts`, `invite.ts`).
 

@@ -51,7 +51,7 @@ export async function createMenuCategory(input: MenuCategoryInput) {
   const result = menuCategorySchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const existingCategory = await prisma.menuCategory.findFirst({
     where: {
@@ -136,7 +136,7 @@ export async function createMenu(input: MenuInput) {
   const result = menuSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const existingMenu = await prisma.menu.findFirst({
     where: {

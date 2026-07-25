@@ -75,7 +75,7 @@ export async function createIngredient(input: IngredientInput) {
   const result = ingredientSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const existing = await prisma.ingredient.findFirst({
     where: {

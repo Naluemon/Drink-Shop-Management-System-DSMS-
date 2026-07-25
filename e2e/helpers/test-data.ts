@@ -16,7 +16,8 @@ export interface TestMenu {
 // defaults to 20 (well under the default refund threshold); pass a higher
 // value for the above-threshold refund-approval scenario.
 export async function createTestMenu(createdBy: string, basePrice = 20): Promise<TestMenu> {
-  const branch = await getOrCreateDefaultBranch();
+  const { organizationId } = await prisma.user.findUniqueOrThrow({ where: { id: createdBy } });
+  const branch = await getOrCreateDefaultBranch(organizationId);
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
   const ingredient = await prisma.ingredient.create({
@@ -98,7 +99,8 @@ export async function createTestModifierGroup(
   ingredientQuantity: number,
   priceDelta: number,
 ): Promise<TestModifierGroup> {
-  const branch = await getOrCreateDefaultBranch();
+  const { organizationId } = await prisma.user.findUniqueOrThrow({ where: { id: createdBy } });
+  const branch = await getOrCreateDefaultBranch(organizationId);
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
   const supportIngredient = await prisma.ingredient.create({

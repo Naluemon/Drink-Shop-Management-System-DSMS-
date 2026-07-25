@@ -32,9 +32,14 @@ export async function createTestUser(role: UserRole): Promise<TestUser> {
     throw new Error(`Failed to create Supabase Auth test user: ${error?.message}`);
   }
 
+  // Phase A (multi-tenant-phase-a-isolation): exactly one Organization
+  // exists until Phase B's self-service signup.
+  const organization = await prisma.organization.findFirstOrThrow();
+
   await prisma.user.create({
     data: {
       id: data.user.id,
+      organizationId: organization.id,
       email,
       fullName: `E2E Test ${role}`,
       role,

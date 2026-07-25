@@ -73,6 +73,14 @@ describe("bootstrapOwner (D6)", () => {
 
   it("creates exactly one Owner on first signup", async () => {
     prismaMock.user.count.mockResolvedValue(0); // pre-check: no Owner yet
+    // Phase A (multi-tenant-phase-a-isolation): exactly one Organization
+    // exists, resolved inside the bootstrap transaction.
+    prismaMock.organization.findFirstOrThrow.mockResolvedValue({
+      id: "org-1",
+      name: "ร้านของคุณ",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
     signUp.mockResolvedValue({ data: { user: { id: "auth-user-1" } }, error: null });
 
     await expect(
@@ -84,6 +92,7 @@ describe("bootstrapOwner (D6)", () => {
     expect(prismaMock.user.create).toHaveBeenCalledWith({
       data: {
         id: "auth-user-1",
+        organizationId: "org-1",
         email: "owner@shop.com",
         fullName: "Owner",
         role: "owner",

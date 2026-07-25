@@ -28,7 +28,7 @@ function permissionErrorMessage(e: unknown, fallback: string) {
 // Lazily seeds the Phase 6 hardcoded defaults on first real access so
 // historical inventory_movements.reason_code values ("spoiled", "broken", ...)
 // stay valid — mirrors getOrCreateCompanySettings()'s singleton pattern.
-async function ensureSeeded(actorId: string) {
+async function ensureSeeded(actorId: string, organizationId: string) {
   const count = await prisma.reasonCode.count();
   if (count > 0) return;
   await prisma.reasonCode.createMany({
@@ -36,6 +36,7 @@ async function ensureSeeded(actorId: string) {
       code: r.value,
       label: r.label,
       createdBy: actorId,
+      organizationId,
     })),
   });
 }
@@ -46,7 +47,7 @@ export async function listReasonCodes() {
   const actor = await getActor();
   if (!actor) return { error: "กรุณาล็อกอินก่อน" };
 
-  await ensureSeeded(actor.id);
+  await ensureSeeded(actor.id, actor.organizationId);
 
   const codes = await prisma.reasonCode.findMany({
     where: { deletedAt: null, isActive: true },
@@ -67,7 +68,7 @@ export async function listAllReasonCodes() {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ดูการตั้งค่า") };
   }
 
-  await ensureSeeded(actor.id);
+  await ensureSeeded(actor.id, actor.organizationId);
 
   const codes = await prisma.reasonCode.findMany({
     where: { deletedAt: null },
@@ -105,7 +106,12 @@ export async function createReasonCode(
   if (existing) return { error: "มีรหัสนี้อยู่แล้ว กรุณาใช้รหัสอื่น" };
 
   const code = await prisma.reasonCode.create({
-    data: { code: result.data.code, label: result.data.label, createdBy: actor.id },
+    data: {
+      code: result.data.code,
+      label: result.data.label,
+      createdBy: actor.id,
+      organizationId: actor.organizationId,
+    },
   });
 
   return {

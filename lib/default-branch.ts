@@ -7,5 +7,9 @@ import { prisma } from "@/lib/prisma";
 export async function getOrCreateDefaultBranch() {
   const existing = await prisma.branch.findFirst({ orderBy: { createdAt: "asc" } });
   if (existing) return existing;
-  return prisma.branch.create({ data: { name: "สาขาหลัก" } });
+  // Phase A (multi-tenant-phase-a-isolation): exactly one Organization exists
+  // until Phase B's self-service signup — resolve it here rather than
+  // threading an organizationId through every caller of this function.
+  const organization = await prisma.organization.findFirstOrThrow();
+  return prisma.branch.create({ data: { name: "สาขาหลัก", organizationId: organization.id } });
 }

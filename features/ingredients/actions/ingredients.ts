@@ -1,0 +1,207 @@
+"use server";
+
+import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
+import { requirePermission, PermissionError } from "@/lib/permissions";
+import { getOrCreateDefaultBranch } from "@/lib/default-branch";
+import {
+  ingredientSchema,
+  IngredientInput,
+  unitConversionSchema,
+  UnitConversionInput,
+} from "../schemas/ingredient.schema";
+
+async function getActor() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  return prisma.user.findUnique({ where: { id: user.id } });
+}
+
+function permissionErrorMessage(e: unknown, fallback: string) {
+  if (e instanceof PermissionError) return fallback;
+  throw e;
+}
+
+// FR-ING-01: CRUD ingredient พร้อม Search/Filter ตามชื่อ/supplier
+// (หมายเหตุ: REQUIREMENTS.md เขียนว่า filter ตาม "หมวดหมู่" ด้วย แต่ schema.prisma
+// ไม่มีคอลัมน์ category ของ ingredient เลย — implement เท่าที่ schema รองรับจริง
+// คือชื่อ+supplier ก่อน ส่วน category ต้อง confirm กับผู้ใช้ว่าจะเพิ่มคอลัมน์ใหม่ไหม)
+export async function listIngredients(filters?: { search?: string; supplierId?: string }) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "view", "ingredient");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ดูรายการวัตถุดิบ") };
+  }
+
+  const ingredients = await prisma.ingredient.findMany({
+    where: {
+      deletedAt: null,
+      ...(filters?.search ? { name: { contains: filters.search, mode: "insensitive" } } : {}),
+      ...(filters?.supplierId ? { supplierId: filters.supplierId } : {}),
+    },
+    include: { supplier: true, unitConversions: true },
+    orderBy: { name: "asc" },
+  });
+
+  return { ingredients };
+}
+
+export async function listSuppliers() {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+  const suppliers = await prisma.supplier.findMany({
+    where: { deletedAt: null },
+    orderBy: { name: "asc" },
+  });
+  return { suppliers };
+}
+
+export async function createIngredient(input: IngredientInput) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "create", "ingredient");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์เพิ่มวัตถุดิบ") };
+  }
+
+  const result = ingredientSchema.safeParse(input);
+  if (!result.success) return { error: result.error.issues[0].message };
+
+  const branch = await getOrCreateDefaultBranch();
+
+  const existing = await prisma.ingredient.findFirst({
+    where: {
+      branchId: branch.id,
+      deletedAt: null,
+      name: { equals: result.data.name, mode: "insensitive" },
+    },
+  });
+  if (existing) return { error: "มีวัตถุดิบชื่อนี้อยู่แล้ว" };
+
+  const ingredient = await prisma.ingredient.create({
+    data: {
+      branchId: branch.id,
+      name: result.data.name,
+      baseUnit: result.data.baseUnit,
+      costPerUnit: result.data.costPerUnit,
+      lowStockThreshold:
+        result.data.lowStockThreshold === "" || result.data.lowStockThreshold === undefined
+          ? null
+          : result.data.lowStockThreshold,
+      supplierId: result.data.supplierId || null,
+      createdBy: actor.id,
+    },
+  });
+
+  return { success: true, ingredient };
+}
+
+export async function updateIngredient(id: string, input: IngredientInput) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "update", "ingredient");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขวัตถุดิบ") };
+  }
+
+  const result = ingredientSchema.safeParse(input);
+  if (!result.success) return { error: result.error.issues[0].message };
+
+  const current = await prisma.ingredient.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบวัตถุดิบ" };
+
+  const existing = await prisma.ingredient.findFirst({
+    where: {
+      branchId: current.branchId,
+      deletedAt: null,
+      id: { not: id },
+      name: { equals: result.data.name, mode: "insensitive" },
+    },
+  });
+  if (existing) return { error: "มีวัตถุดิบชื่อนี้อยู่แล้ว" };
+
+  await prisma.ingredient.update({
+    where: { id },
+    data: {
+      name: result.data.name,
+      baseUnit: result.data.baseUnit,
+      costPerUnit: result.data.costPerUnit,
+      lowStockThreshold:
+        result.data.lowStockThreshold === "" || result.data.lowStockThreshold === undefined
+          ? null
+          : result.data.lowStockThreshold,
+      supplierId: result.data.supplierId || null,
+      updatedBy: actor.id,
+    },
+  });
+
+  return { success: true };
+}
+
+// FR-ING-07: ลบแบบ soft-delete เท่านั้น (DATABASE.md §4 — อาจถูกอ้างอิงจาก recipe/PO เก่า)
+export async function softDeleteIngredient(id: string) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "delete", "ingredient");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบวัตถุดิบ") };
+  }
+
+  await prisma.ingredient.update({
+    where: { id },
+    data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  return { success: true };
+}
+
+// FR-ING-03: unit_conversions หลายรายการต่อ ingredient
+export async function addUnitConversion(ingredientId: string, input: UnitConversionInput) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "update", "ingredient");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขวัตถุดิบ") };
+  }
+
+  const result = unitConversionSchema.safeParse(input);
+  if (!result.success) return { error: result.error.issues[0].message };
+
+  const conversion = await prisma.unitConversion.create({
+    data: {
+      ingredientId,
+      purchaseUnitName: result.data.purchaseUnitName,
+      conversionFactor: result.data.conversionFactor,
+    },
+  });
+
+  return { success: true, conversion };
+}
+
+export async function deleteUnitConversion(id: string) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "update", "ingredient");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขวัตถุดิบ") };
+  }
+
+  await prisma.unitConversion.delete({ where: { id } });
+  return { success: true };
+}

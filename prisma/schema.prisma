@@ -63,6 +63,16 @@ enum ModifierSelectionType {
   @@map("modifier_selection_type")
 }
 
+/// A menu category belongs to exactly one high-level type — Food or Drink —
+/// so the menu list, POS, and reports can group/filter above the free-text
+/// category name (e.g. "ชา"/"กาแฟ" are drink; "อาหาร" is food).
+enum MenuCategoryType {
+  food
+  drink
+
+  @@map("menu_category_type")
+}
+
 enum PurchaseOrderStatus {
   pending
   received
@@ -84,6 +94,22 @@ enum RefundRequestStatus {
   rejected
 
   @@map("refund_request_status")
+}
+
+// DECISIONS.md D4: default warn-only (non-blocking, flag is_stock_deficit),
+// Owner may opt into strict_block globally or per ingredient (Phase 12)
+enum StockDeficitPolicy {
+  warn_only
+  strict_block
+
+  @@map("stock_deficit_policy")
+}
+
+enum ReceiptPaperWidth {
+  mm58
+  mm80
+
+  @@map("receipt_paper_width")
 }
 
 // ============================================================================
@@ -131,6 +157,7 @@ model UserInvite {
   acceptedAt  DateTime? @map("accepted_at")
   createdAt   DateTime  @default(now()) @map("created_at")
 
+  @@index([email])
   @@map("user_invites")
 }
 
@@ -140,15 +167,27 @@ model UserInvite {
 // ============================================================================
 
 model CompanySettings {
-  id                   String   @id @default(uuid())
-  timezone             String   @default("Asia/Bangkok")
-  businessDayStartHour Int      @default(5) @map("business_day_start_hour") // 0-23
-  isVatRegistered      Boolean  @default(false) @map("is_vat_registered")
-  taxId                String?  @map("tax_id") // เลขประจำตัวผู้เสียภาษี 13 หลัก
-  registeredName       String?  @map("registered_name")
-  registeredAddress    String?  @map("registered_address")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id                   String             @id @default(uuid())
+  timezone             String             @default("Asia/Bangkok")
+  businessDayStartHour Int                @default(5) @map("business_day_start_hour") // 0-23
+  isVatRegistered      Boolean            @default(false) @map("is_vat_registered")
+  taxId                String?            @map("tax_id") // เลขประจำตัวผู้เสียภาษี 13 หลัก
+  // registeredName/registeredAddress double as the general "company info" shown
+  // on every receipt (FR-SET-01), not only the formal tax invoice fields (D16) —
+  // a non-VAT-registered shop still wants its name/address printed, just without
+  // the "ใบกำกับภาษี" label.
+  registeredName       String?            @map("registered_name")
+  registeredAddress    String?            @map("registered_address")
+  companyPhone         String?            @map("company_phone")
+  receiptFooterMessage String?            @map("receipt_footer_message")
+  receiptPaperWidth    ReceiptPaperWidth  @default(mm80) @map("receipt_paper_width")
+  openTime             String?            @map("open_time") // "HH:MM", display-only on receipts
+  closeTime            String?            @map("close_time") // "HH:MM", display-only on receipts
+  // Global default for FR-SET-04/D4 — Ingredient.stockDeficitPolicyOverride
+  // wins per-ingredient when set; falls back to this otherwise.
+  stockDeficitPolicy   StockDeficitPolicy @default(warn_only) @map("stock_deficit_policy")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
 
   @@map("company_settings")
 }
@@ -156,12 +195,31 @@ model CompanySettings {
 model TaxSettings {
   id                      String   @id @default(uuid())
   vatMode                 VatMode  @default(inclusive) @map("vat_mode")
-  vatRate                 Decimal  @default(7.00) @db.Decimal(5, 2) @map("vat_rate")
-  refundApprovalThreshold Decimal  @default(500.00) @db.Decimal(12, 2) @map("refund_approval_threshold")
+  vatRate                 Decimal  @default(7.00) @map("vat_rate") @db.Decimal(5, 2)
+  refundApprovalThreshold Decimal  @default(500.00) @map("refund_approval_threshold") @db.Decimal(12, 2)
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
 
   @@map("tax_settings")
+}
+
+// FR-SET-05 / DECISIONS.md D12 review trigger: configurable master list for
+// stock_out reason codes (Owner-managed in Settings), replacing the Phase 6
+// hardcoded default list. `code` is the same opaque string already stored in
+// inventory_movements.reason_code — seeded rows keep the original default
+// codes ("spoiled", "broken", ...) so historical movements stay valid.
+model ReasonCode {
+  id        String    @id @default(uuid())
+  code      String    @unique
+  label     String
+  isActive  Boolean   @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
+
+  @@map("reason_codes")
 }
 
 // ============================================================================
@@ -186,19 +244,21 @@ model Supplier {
 }
 
 model Ingredient {
-  id                String    @id @default(uuid())
-  branchId          String    @map("branch_id")
-  name              String
-  baseUnit          BaseUnit  @map("base_unit")
-  costPerUnit       Decimal   @default(0) @db.Decimal(12, 4) @map("cost_per_unit")
-  currentStockQty   Decimal   @default(0) @db.Decimal(12, 4) @map("current_stock_qty")
-  lowStockThreshold Decimal?  @db.Decimal(12, 4) @map("low_stock_threshold")
-  supplierId        String?   @map("supplier_id")
-  deletedAt         DateTime? @map("deleted_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  createdBy         String    @map("created_by")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  updatedBy         String?   @map("updated_by")
+  id                         String              @id @default(uuid())
+  branchId                   String              @map("branch_id")
+  name                       String
+  baseUnit                   BaseUnit            @map("base_unit")
+  costPerUnit                Decimal             @default(0) @map("cost_per_unit") @db.Decimal(12, 4)
+  currentStockQty            Decimal             @default(0) @map("current_stock_qty") @db.Decimal(12, 4)
+  lowStockThreshold          Decimal?            @map("low_stock_threshold") @db.Decimal(12, 4)
+  // DECISIONS.md D4 / FR-SET-04: null = follow CompanySettings.stockDeficitPolicy
+  stockDeficitPolicyOverride StockDeficitPolicy? @map("stock_deficit_policy_override")
+  supplierId                 String?             @map("supplier_id")
+  deletedAt                  DateTime?           @map("deleted_at")
+  createdAt                  DateTime            @default(now()) @map("created_at")
+  createdBy                  String              @map("created_by")
+  updatedAt                  DateTime            @updatedAt @map("updated_at")
+  updatedBy                  String?             @map("updated_by")
 
   supplier           Supplier?           @relation(fields: [supplierId], references: [id])
   unitConversions    UnitConversion[]
@@ -215,7 +275,7 @@ model UnitConversion {
   id               String   @id @default(uuid())
   ingredientId     String   @map("ingredient_id")
   purchaseUnitName String   @map("purchase_unit_name")
-  conversionFactor Decimal  @db.Decimal(12, 4) @map("conversion_factor")
+  conversionFactor Decimal  @map("conversion_factor") @db.Decimal(12, 4)
   createdAt        DateTime @default(now()) @map("created_at")
 
   ingredient Ingredient @relation(fields: [ingredientId], references: [id])
@@ -254,14 +314,15 @@ model RecipeIngredient {
 }
 
 model MenuCategory {
-  id        String    @id @default(uuid())
-  branchId  String    @map("branch_id")
+  id        String           @id @default(uuid())
+  branchId  String           @map("branch_id")
   name      String
-  deletedAt DateTime? @map("deleted_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  createdBy String    @map("created_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  updatedBy String?   @map("updated_by")
+  type      MenuCategoryType @default(drink)
+  deletedAt DateTime?        @map("deleted_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+  createdBy String           @map("created_by")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  updatedBy String?          @map("updated_by")
 
   menus Menu[]
 
@@ -274,7 +335,7 @@ model Menu {
   categoryId  String?   @map("category_id")
   recipeId    String    @map("recipe_id")
   name        String
-  basePrice   Decimal   @db.Decimal(12, 2) @map("base_price")
+  basePrice   Decimal   @map("base_price") @db.Decimal(12, 2)
   imageUrl    String?   @map("image_url")
   isAvailable Boolean   @default(true) @map("is_available")
   deletedAt   DateTime? @map("deleted_at")
@@ -297,9 +358,9 @@ model MenuVariant {
   id               String    @id @default(uuid())
   menuId           String    @map("menu_id")
   name             String
-  recipeMultiplier Decimal?  @db.Decimal(6, 3) @map("recipe_multiplier")
+  recipeMultiplier Decimal?  @map("recipe_multiplier") @db.Decimal(6, 3)
   overrideRecipeId String?   @map("override_recipe_id")
-  priceDelta       Decimal   @default(0) @db.Decimal(12, 2) @map("price_delta")
+  priceDelta       Decimal   @default(0) @map("price_delta") @db.Decimal(12, 2)
   isDefault        Boolean   @default(false) @map("is_default")
   deletedAt        DateTime? @map("deleted_at")
   createdAt        DateTime  @default(now()) @map("created_at")
@@ -347,14 +408,14 @@ model Modifier {
   modifierGroupId    String    @map("modifier_group_id")
   name               String
   ingredientId       String?   @map("ingredient_id")
-  ingredientQuantity Decimal?  @db.Decimal(12, 4) @map("ingredient_quantity")
-  priceDelta         Decimal   @default(0) @db.Decimal(12, 2) @map("price_delta")
+  ingredientQuantity Decimal?  @map("ingredient_quantity") @db.Decimal(12, 4)
+  priceDelta         Decimal   @default(0) @map("price_delta") @db.Decimal(12, 2)
   deletedAt          DateTime? @map("deleted_at")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  modifierGroup     ModifierGroup                   @relation(fields: [modifierGroupId], references: [id])
-  ingredient        Ingredient?                     @relation(fields: [ingredientId], references: [id])
+  modifierGroup     ModifierGroup                  @relation(fields: [modifierGroupId], references: [id])
+  ingredient        Ingredient?                    @relation(fields: [ingredientId], references: [id])
   saleItemModifiers SalesTransactionItemModifier[]
 
   @@map("modifiers")
@@ -379,6 +440,8 @@ model PurchaseOrder {
   supplier Supplier            @relation(fields: [supplierId], references: [id])
   items    PurchaseOrderItem[]
 
+  @@index([supplierId])
+  @@index([status])
   @@map("purchase_orders")
 }
 
@@ -388,11 +451,13 @@ model PurchaseOrderItem {
   ingredientId     String  @map("ingredient_id")
   purchaseUnitName String  @map("purchase_unit_name")
   quantity         Decimal @db.Decimal(12, 4)
-  unitPrice        Decimal @db.Decimal(12, 4) @map("unit_price") // price per purchase_unit
+  unitPrice        Decimal @map("unit_price") @db.Decimal(12, 4) // price per purchase_unit
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
   ingredient    Ingredient    @relation(fields: [ingredientId], references: [id])
 
+  @@index([purchaseOrderId])
+  @@index([ingredientId])
   @@map("purchase_order_items")
 }
 
@@ -418,6 +483,13 @@ model InventoryMovement {
   reversalOf InventoryMovement?  @relation("MovementReversal", fields: [reversalOfId], references: [id])
   reversals  InventoryMovement[] @relation("MovementReversal")
 
+  // Performance (TESTING.md §10): Dashboard/Reports filter by createdAt range
+  // on every load, and void/refund + the inventory report look up by
+  // ingredient and by (referenceType, referenceId) — all full table scans
+  // without these, and this table is append-only (grows forever).
+  @@index([createdAt])
+  @@index([ingredientId])
+  @@index([referenceType, referenceId])
   @@map("inventory_movements")
 }
 
@@ -431,11 +503,11 @@ model SalesTransaction {
   cashierId          String        @map("cashier_id")
   paymentMethod      PaymentMethod @map("payment_method")
   subtotal           Decimal       @db.Decimal(12, 2)
-  discountAmount     Decimal       @default(0) @db.Decimal(12, 2) @map("discount_amount")
-  roundingAdjustment Decimal       @default(0) @db.Decimal(6, 2) @map("rounding_adjustment")
-  totalAmount        Decimal       @db.Decimal(12, 2) @map("total_amount")
+  discountAmount     Decimal       @default(0) @map("discount_amount") @db.Decimal(12, 2)
+  roundingAdjustment Decimal       @default(0) @map("rounding_adjustment") @db.Decimal(6, 2)
+  totalAmount        Decimal       @map("total_amount") @db.Decimal(12, 2)
   vatModeSnapshot    VatMode       @map("vat_mode_snapshot")
-  vatRateSnapshot    Decimal       @db.Decimal(5, 2) @map("vat_rate_snapshot")
+  vatRateSnapshot    Decimal       @map("vat_rate_snapshot") @db.Decimal(5, 2)
   taxInvoiceNumber   Int?          @map("tax_invoice_number") // DECISIONS.md D16, running number, not reset
   reversalOfId       String?       @map("reversal_of_id")
   voidReason         String?       @map("void_reason")
@@ -444,10 +516,17 @@ model SalesTransaction {
   createdBy          String        @map("created_by")
 
   items          SalesTransactionItem[]
-  reversalOf     SalesTransaction?       @relation("SaleReversal", fields: [reversalOfId], references: [id])
-  reversals      SalesTransaction[]      @relation("SaleReversal")
+  reversalOf     SalesTransaction?      @relation("SaleReversal", fields: [reversalOfId], references: [id])
+  reversals      SalesTransaction[]     @relation("SaleReversal")
   refundRequests RefundRequest[]
 
+  // Performance (TESTING.md §10): Dashboard/Reports bucket every query by
+  // createdAt range; POS's recent-transactions list filters by cashierId;
+  // void/refund look up the reversal row by reversalOfId — all on this
+  // append-only, ever-growing table.
+  @@index([createdAt])
+  @@index([cashierId])
+  @@index([reversalOfId])
   @@map("sales_transactions")
 }
 
@@ -457,9 +536,9 @@ model SalesTransactionItem {
   menuId             String   @map("menu_id")
   menuVariantId      String?  @map("menu_variant_id")
   quantity           Int      @default(1)
-  unitPrice          Decimal  @db.Decimal(12, 2) @map("unit_price")
-  costAtSaleTime     Decimal  @db.Decimal(12, 4) @map("cost_at_sale_time")
-  discountAmount     Decimal  @default(0) @db.Decimal(12, 2) @map("discount_amount")
+  unitPrice          Decimal  @map("unit_price") @db.Decimal(12, 2)
+  costAtSaleTime     Decimal  @map("cost_at_sale_time") @db.Decimal(12, 4)
+  discountAmount     Decimal  @default(0) @map("discount_amount") @db.Decimal(12, 2)
   reversedQuantity   Int      @default(0) @map("reversed_quantity") // reserved for future partial refund — DECISIONS.md D-Note
   createdAt          DateTime @default(now()) @map("created_at")
 
@@ -468,6 +547,8 @@ model SalesTransactionItem {
   menuVariant      MenuVariant?                   @relation(fields: [menuVariantId], references: [id])
   modifiers        SalesTransactionItemModifier[]
 
+  @@index([salesTransactionId])
+  @@index([menuId])
   @@map("sales_transaction_items")
 }
 
@@ -476,8 +557,8 @@ model SalesTransactionItemModifier {
   salesTransactionItemId String   @map("sales_transaction_item_id")
   modifierId             String   @map("modifier_id")
   modifierNameSnapshot   String   @map("modifier_name_snapshot")
-  priceDeltaSnapshot     Decimal  @db.Decimal(12, 2) @map("price_delta_snapshot")
-  ingredientCostSnapshot Decimal? @db.Decimal(12, 4) @map("ingredient_cost_snapshot")
+  priceDeltaSnapshot     Decimal  @map("price_delta_snapshot") @db.Decimal(12, 2)
+  ingredientCostSnapshot Decimal? @map("ingredient_cost_snapshot") @db.Decimal(12, 4)
   createdAt              DateTime @default(now()) @map("created_at")
 
   salesTransactionItem SalesTransactionItem @relation(fields: [salesTransactionItemId], references: [id])
@@ -499,6 +580,8 @@ model RefundRequest {
 
   salesTransaction SalesTransaction @relation(fields: [salesTransactionId], references: [id])
 
+  @@index([salesTransactionId])
+  @@index([status])
   @@map("refund_requests")
 }
 
@@ -527,6 +610,7 @@ model ExpenseEntry {
   categoryId   String   @map("category_id")
   amount       Decimal  @db.Decimal(12, 2)
   description  String?
+  slipUrl      String?  @map("slip_url") // storage path in the private "expense-slips" bucket, not a public URL
   reversalOfId String?  @map("reversal_of_id")
   createdAt    DateTime @default(now()) @map("created_at")
   createdBy    String   @map("created_by") // may be Owner/Manager/Accountant — DECISIONS.md D14
@@ -535,5 +619,7 @@ model ExpenseEntry {
   reversalOf ExpenseEntry?   @relation("ExpenseReversal", fields: [reversalOfId], references: [id])
   reversals  ExpenseEntry[]  @relation("ExpenseReversal")
 
+  @@index([createdAt])
+  @@index([categoryId])
   @@map("expense_entries")
 }

@@ -34,6 +34,21 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // getUser() above may have refreshed an expiring access token, which queues
+  // new Set-Cookie writes onto `supabaseResponse` via the setAll() callback.
+  // NextResponse.redirect() always creates a brand-new response, so those
+  // refreshed cookies must be copied onto it explicitly — otherwise the
+  // browser keeps resending the old (now-rotated, invalid) refresh token on
+  // every request, getUser() keeps failing, and protected routes redirect to
+  // /login forever (ERR_TOO_MANY_REDIRECTS). See Supabase's Next.js SSR guide.
+  function redirectWithCookies(url: URL) {
+    const response = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      response.cookies.set(cookie);
+    });
+    return response;
+  }
+
   // Default-deny: every route requires a session except this explicit allowlist.
   // (Previously this checked pathname.startsWith("/(protected)"), which can never
   // match anything — Next.js strips route-group parentheses from the real URL —
@@ -58,7 +73,7 @@ export async function proxy(request: NextRequest) {
   if (isProtectedRoute && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return redirectWithCookies(url);
   }
 
   // DECISIONS.md D13: Session timeout check (8 ชั่วโมง)
@@ -70,7 +85,7 @@ export async function proxy(request: NextRequest) {
       url.pathname = "/login";
       url.searchParams.set("error", "session_expired");
       await supabase.auth.signOut();
-      return NextResponse.redirect(url);
+      return redirectWithCookies(url);
     }
 
     // ตรวจสอบว่า user ยัง active อยู่หรือไม่
@@ -80,7 +95,7 @@ export async function proxy(request: NextRequest) {
       url.pathname = "/login";
       url.searchParams.set("error", "account_deactivated");
       await supabase.auth.signOut();
-      return NextResponse.redirect(url);
+      return redirectWithCookies(url);
     }
   }
 
@@ -88,7 +103,7 @@ export async function proxy(request: NextRequest) {
   if ((pathname.startsWith("/login") || pathname.startsWith("/setup")) && user) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+    return redirectWithCookies(url);
   }
 
   return supabaseResponse;

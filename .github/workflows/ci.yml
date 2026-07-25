@@ -9,6 +9,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # DEPLOYMENT.md §2: build needs these inlined at build time (NEXT_PUBLIC_*
+      # vars) and prisma.config.ts/lib/prisma.ts need DATABASE_URL/DIRECT_URL to
+      # resolve even for schema validation. Add these as repo secrets in GitHub
+      # (Settings → Secrets and variables → Actions) — CI has none configured
+      # yet, so this job will fail at the Build step until they're added.
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prisma Validate (schema syntax, no DB connection needed)
+        run: npx prisma validate
+
       - name: Prisma Generate
         run: npm run prisma:generate
 
@@ -33,3 +48,6 @@ jobs:
 
       - name: Test
         run: npm run test
+
+      - name: Build
+        run: npm run build

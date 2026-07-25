@@ -41,7 +41,7 @@ Merge เข้า `main` = auto-deploy ไป production (หลัง Phase 14
 - Vercel Analytics/Logs สำหรับ frontend/server errors
 - Supabase Logs สำหรับ database query/error
 - แนะนำเพิ่ม error tracking (เช่น Sentry) ก่อนเข้าสู่ Phase 8 (POS) เพราะเป็นจุดที่กระทบเงินโดยตรง — ตัดสินใจตอน Phase 13-14
-- **PDPA Data Breach Response** (ดู `DECISIONS.md` D15, `SECURITY.md` §7): ต้องมีแผน incident response ขั้นต่ำที่ระบุผู้รับผิดชอบแจ้ง PDPC ภายใน 72 ชั่วโมงหากเกิดเหตุข้อมูลรั่วไหลที่กระทบสิทธิผู้ใช้
+- **PDPA Data Breach Response** (ดู `DECISIONS.md` D15, `SECURITY.md` §7): ต้องมีแผน incident response ขั้นต่ำที่ระบุผู้รับผิดชอบแจ้ง PDPC ภายใน 72 ชั่วโมงหากเกิดเหตุข้อมูลรั่วไหลที่กระทบสิทธิผู้ใช้ — ดูแผนเต็มที่ `PDPA_INCIDENT_RESPONSE.md` (**ต้องกรอกตารางผู้รับผิดชอบ §2 ให้ครบก่อน production จริง**)
 
 ## 6. Rollback Plan
 

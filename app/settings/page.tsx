@@ -1,0 +1,112 @@
+import { redirect } from "next/navigation";
+import { getProfile } from "@/features/auth/actions/profile";
+import { logout } from "@/features/auth/actions/logout";
+import {
+  getRefundApprovalThreshold,
+  updateRefundApprovalThreshold,
+} from "@/features/settings/actions/refund-threshold";
+import { getFullSettings } from "@/features/settings/actions/company-settings";
+import { listAllReasonCodes } from "@/features/settings/actions/reason-codes";
+import { AppShell } from "@/components/app-shell";
+import { SettingsPageContent } from "@/features/settings/components/settings-page-content";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ToastFromSearchParams } from "@/components/toast-from-search-params";
+
+// Phase 12 — Settings. Owner-only per SECURITY.md §1 (settings: CRUD is
+// Owner-only, no other role has access). Refund approval threshold
+// (D5/D14, Phase 2) keeps its original server-rendered form below.
+export default async function SettingsPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const profile = await getProfile();
+  if (profile.error || !profile.user) {
+    redirect("/login");
+  }
+  if (profile.user.role !== "owner") {
+    redirect("/dashboard");
+  }
+
+  const searchParams = await props.searchParams;
+  const error = searchParams?.error as string | undefined;
+  const message = searchParams?.message as string | undefined;
+
+  const [thresholdResult, fullSettingsResult, reasonCodesResult] = await Promise.all([
+    getRefundApprovalThreshold(),
+    getFullSettings(),
+    listAllReasonCodes(),
+  ]);
+
+  async function handleSubmit(formData: FormData) {
+    "use server";
+    const result = await updateRefundApprovalThreshold(formData);
+    if (result?.error) {
+      redirect(`/settings?error=${encodeURIComponent(result.error)}`);
+    }
+    redirect(`/settings?message=${encodeURIComponent(result?.message ?? "บันทึกสำเร็จ")}`);
+  }
+
+  return (
+    <AppShell user={profile.user} logoutAction={logout}>
+      <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6">
+        <div>
+          <h1 className="font-heading text-foreground text-2xl font-semibold tracking-tight">
+            ตั้งค่าระบบ
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            ข้อมูลร้าน, ภาษี, ใบเสร็จ, เวลาทำการ, นโยบายสต็อก, รายการเหตุผล และธีม
+          </p>
+        </div>
+
+        <ToastFromSearchParams error={error} message={message} />
+
+        {"error" in fullSettingsResult || "error" in reasonCodesResult ? (
+          <p className="text-destructive text-sm">
+            {("error" in fullSettingsResult && fullSettingsResult.error) ||
+              ("error" in reasonCodesResult && reasonCodesResult.error)}
+          </p>
+        ) : (
+          <SettingsPageContent
+            companySettings={fullSettingsResult.companySettings}
+            taxSettings={fullSettingsResult.taxSettings}
+            ingredients={fullSettingsResult.ingredients}
+            reasonCodes={reasonCodesResult.codes}
+          />
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>วงเงินอนุมัติคืนเงินของหัวหน้ากะ</CardTitle>
+            <CardDescription>
+              Shift Supervisor อนุมัติคำขอคืนเงินได้เองถ้ายอดไม่เกินจำนวนนี้ ยอดที่เกินต้องส่งต่อ
+              Manager/Owner (DECISIONS.md D5, D14)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {thresholdResult.error ? (
+              <p className="text-destructive text-sm">{thresholdResult.error}</p>
+            ) : (
+              <form action={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="threshold">วงเงิน (บาท)</Label>
+                  <Input
+                    id="threshold"
+                    name="threshold"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    defaultValue={thresholdResult.threshold}
+                  />
+                </div>
+                <Button type="submit">บันทึก</Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </AppShell>
+  );
+}

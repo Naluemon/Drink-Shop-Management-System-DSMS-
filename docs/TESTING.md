@@ -119,6 +119,7 @@ Feature จะ merge เข้า `main` ได้ต้องผ่าน:
 
 ## 11. Security Test (Phase 13)
 
-- ทดสอบว่า RBAC matrix ใน `SECURITY.md` §1 ตรงกับพฤติกรรมจริงทุก role (6 role) × ทุก module (เขียนเป็น test matrix อัตโนมัติ — ดู TC-RBAC-01/02 ใน §3 เป็นตัวอย่าง)
-- ทดสอบว่า RLS policy ไม่ปล่อยให้ query ข้าม branch_id ได้ (แม้ MVP มีสาขาเดียวก็ควรมี test เผื่ออนาคต)
+- ทดสอบว่า RBAC matrix ใน `SECURITY.md` §1 ตรงกับพฤติกรรมจริงทุก role (6 role) × ทุก module (เขียนเป็น test matrix อัตโนมัติ — ดู TC-RBAC-01/02 ใน §3 เป็นตัวอย่าง, `lib/permissions.matrix.test.ts`)
+- ~~ทดสอบว่า RLS policy ไม่ปล่อยให้ query ข้าม branch_id ได้~~ — **D7 (ยืนยันแล้ว, Phase 13)**: ไม่มี RLS policy จริงใน MVP เพราะ Prisma
+  connection สิทธิ์สูงทำให้ RLS ไม่มีผลกับ request ปกติเลย (ดู `DECISIONS.md` D7) — RBAC matrix test ด้านบนคือด่านป้องกันจริงที่ต้องทดสอบแทน
 - ทดสอบสิทธิ PDPA (D15): ผู้ใช้เข้าถึงข้อมูลส่วนตัวคนอื่นไม่ได้ นอกจาก Owner ที่มีสิทธิ์บริหารจัดการ

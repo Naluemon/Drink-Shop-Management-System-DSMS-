@@ -8,7 +8,11 @@ export default defineConfig({
   migrations: {
     path: "prisma/migrations",
   },
+  // CLI/migration commands (migrate, db push, introspect) need this,
+  // separately from the app runtime's pooled DATABASE_URL in lib/prisma.ts —
+  // the transaction pooler (port 6543) doesn't support the advisory locks
+  // Prisma Migrate needs, so pointing the CLI at it hangs with no error.
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env["DIRECT_URL"],
   },
 });

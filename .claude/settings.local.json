@@ -4,7 +4,31 @@
       "Bash(mkdir -p docs)",
       "Bash(mv ARCHITECTURE.md DATABASE.md API.md SECURITY.md UI_UX.md CODING_STANDARD.md TESTING.md DEPLOYMENT.md PROJECT_SCOPE.md PRODUCT_VISION.md IMPLEMENTATION_PLAN.md docs/)",
       "Bash(where jq *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(npx eslint *)",
+      "Bash(npm run *)",
+      "Bash(npx prisma *)",
+      "Bash(powershell -Command \"Get-Process | Where-Object { \\\\$_.ProcessName -match 'node|prisma' } | Select-Object Id,ProcessName,StartTime\" 2>&1)",
+      "Bash(powershell -Command \"Stop-Process -Id 16904,23612 -Force -ErrorAction SilentlyContinue\")",
+      "Bash(tee /tmp/dbpush.log)",
+      "Bash(echo \"EXIT CODE: $?\")",
+      "Bash(powershell -Command 'Get-Process | Where-Object { $_.ProcessName -match '\\\\''node'\\\\'' } | Stop-Process -Force -ErrorAction SilentlyContinue')",
+      "Read(//c/Users/chairat/AppData/Local/**)",
+      "Read(//c/Users/chairat/.cache/**)",
+      "Bash(timeout 10 \"node_modules/@prisma/engines/schema-engine-windows.exe\" --version)",
+      "Bash(powershell -Command 'Get-Process | Where-Object { $_.ProcessName -match '\\\\''node|schema-engine'\\\\'' } | Stop-Process -Force -ErrorAction SilentlyContinue')",
+      "Bash(echo \"LINT EXIT: $?\")",
+      "Bash(echo \"TYPECHECK EXIT: $?\")",
+      "Bash(git mv *)",
+      "Bash(mv middleware.ts proxy.ts)",
+      "Bash(curl -s -o /dev/null -w \"3000: %{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(curl -s -o /dev/null -w \"3001: %{http_code}\\\\n\" http://localhost:3001/login)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill *)",
+      "Bash(find . *)",
+      "Bash(npx vitest *)"
     ]
   }
 }

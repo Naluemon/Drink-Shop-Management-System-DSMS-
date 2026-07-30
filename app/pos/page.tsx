@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
+import { getRolePagePermissionMap, canAccessPage } from "@/lib/page-access";
 import { getPosMenuData } from "@/features/pos/actions/pos-menu";
 import { listRecentTransactions } from "@/features/pos/actions/void-refund";
 import { AppShell } from "@/components/app-shell";
@@ -18,7 +19,8 @@ export default async function PosPage() {
   }
 
   const role = profile.user.role;
-  if (role !== "shift_supervisor" && role !== "cashier") {
+  const permMap = await getRolePagePermissionMap();
+  if (!canAccessPage(role, "pos", permMap)) {
     redirect("/dashboard");
   }
 
@@ -32,7 +34,7 @@ export default async function PosPage() {
   }
 
   return (
-    <AppShell user={profile.user} logoutAction={logout}>
+    <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
         <div>
           <h1 className="font-heading text-foreground text-2xl font-semibold tracking-tight">

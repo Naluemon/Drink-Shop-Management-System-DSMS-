@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile, updateProfile, changePassword } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
+import { getRolePagePermissionMap } from "@/lib/page-access";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ export default async function ProfilePage(props: {
   const searchParams = await props.searchParams;
   const error = searchParams?.error as string | undefined;
   const message = searchParams?.message as string | undefined;
+  const permMap = await getRolePagePermissionMap();
 
   async function handleUpdateProfile(formData: FormData) {
     "use server";
@@ -41,7 +43,7 @@ export default async function ProfilePage(props: {
   }
 
   return (
-    <AppShell user={profile.user} logoutAction={logout}>
+    <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6">
         <div>
           <h1 className="font-heading text-foreground text-2xl font-semibold tracking-tight">

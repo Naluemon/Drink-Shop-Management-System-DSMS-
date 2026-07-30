@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { listUsers } from "@/features/users/actions/manage-users";
 import { logout } from "@/features/auth/actions/logout";
+import { getRolePagePermissionMap, canAccessPage } from "@/lib/page-access";
 import { AppShell } from "@/components/app-shell";
 import { InviteUserDialog } from "@/features/users/components/invite-user-dialog";
 import { UserListTable } from "@/features/users/components/user-list-table";
@@ -17,14 +18,15 @@ export default async function UsersPage() {
   }
 
   const role = profile.user.role;
-  if (role !== "owner" && role !== "manager") {
+  const permMap = await getRolePagePermissionMap();
+  if (!canAccessPage(role, "users", permMap)) {
     redirect("/dashboard");
   }
 
   const usersResult = role === "owner" ? await listUsers() : null;
 
   return (
-    <AppShell user={profile.user} logoutAction={logout}>
+    <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -37,7 +39,7 @@ export default async function UsersPage() {
                 : "เชิญพนักงานใหม่เข้าใช้งานระบบ"}
             </p>
           </div>
-          <InviteUserDialog actorRole={role} />
+          <InviteUserDialog actorRole={role === "owner" ? "owner" : "manager"} />
         </div>
 
         {role === "owner" && usersResult && (

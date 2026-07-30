@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
+import { getRolePagePermissionMap, canAccessPage } from "@/lib/page-access";
 import {
   getRefundApprovalThreshold,
   updateRefundApprovalThreshold,
@@ -25,7 +26,8 @@ export default async function SettingsPage(props: {
   if (profile.error || !profile.user) {
     redirect("/login");
   }
-  if (profile.user.role !== "owner") {
+  const permMap = await getRolePagePermissionMap();
+  if (!canAccessPage(profile.user.role, "settings", permMap)) {
     redirect("/dashboard");
   }
 
@@ -49,7 +51,7 @@ export default async function SettingsPage(props: {
   }
 
   return (
-    <AppShell user={profile.user} logoutAction={logout}>
+    <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6">
         <div>
           <h1 className="font-heading text-foreground text-2xl font-semibold tracking-tight">

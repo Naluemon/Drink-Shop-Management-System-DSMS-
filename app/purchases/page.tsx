@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
+import { getRolePagePermissionMap, canAccessPage } from "@/lib/page-access";
 import { listPurchaseOrders } from "@/features/purchases/actions/purchase-orders";
 import { listSuppliers } from "@/features/purchases/actions/suppliers";
 import { listIngredients } from "@/features/ingredients/actions/ingredients";
@@ -27,7 +28,8 @@ export default async function PurchasesPage(props: {
   }
 
   const role = profile.user.role;
-  if (role === "cashier" || role === "employee" || role === "accountant") {
+  const permMap = await getRolePagePermissionMap();
+  if (!canAccessPage(role, "purchases", permMap)) {
     redirect("/dashboard");
   }
 
@@ -62,7 +64,7 @@ export default async function PurchasesPage(props: {
   const canEdit = role === "owner" || role === "manager";
 
   return (
-    <AppShell user={profile.user} logoutAction={logout}>
+    <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6">
         <div>
           <h1 className="font-heading text-foreground text-2xl font-semibold tracking-tight">

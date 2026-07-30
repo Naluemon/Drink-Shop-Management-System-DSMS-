@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
+import { getRolePagePermissionMap } from "@/lib/page-access";
 import { AppShell } from "@/components/app-shell";
 import { GuideContent } from "@/features/guide/components/guide-content";
 
@@ -12,8 +13,10 @@ export default async function GuidePage() {
     redirect("/login");
   }
 
+  const permMap = await getRolePagePermissionMap();
+
   return (
-    <AppShell user={profile.user} logoutAction={logout}>
+    <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6">
         <div>
           <h1 className="font-heading text-foreground text-2xl font-semibold tracking-tight">

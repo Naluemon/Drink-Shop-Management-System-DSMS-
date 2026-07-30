@@ -88,8 +88,7 @@ export type PageKey =
 New `lib/page-access.ts`:
 
 ```ts
-// Cached read of the whole table, revalidated by tag when the owner saves changes —
-// this table changes rarely, so a full-table cache avoids a DB round trip on every request.
+// Plain query, no cache layer (matches getOrCreateCompanySettings() convention) — see below.
 export async function getRolePagePermissionMap(): Promise<Record<PageKey, Set<UserRole>>>;
 
 export function canAccessPage(

@@ -9,7 +9,7 @@ Today the sidebar menu and the underlying access rules are two different hardcod
 
 - `components/nav-config.ts` computes, at module load, which roles see which nav items by deriving from the static CRUD matrix in `lib/permissions.ts` (`rolesWithAnyAccess`). A role with zero access to a resource never sees the link at all — it's removed from the list, not disabled.
 - The owner cannot change any of this from the UI. Changing what a role can access means editing `lib/permissions.ts` and redeploying.
-- Route-level protection is inconsistent between pages: `app/settings/page.tsx` does an inline `if (profile.user.role !== "owner") redirect(...)`; `app/dashboard/page.tsx` checks `hasPermission(...)` and renders a friendly "welcome" card for roles without dashboard access; every other page (`ingredients`, `recipes`, `inventory`, `purchases`, `reports`, `users`, ...) has **no page-level check at all** — access is enforced only by the nav being hidden, plus whatever the page's data-loading Server Actions do internally via `requirePermission()`, which throws an unhandled `PermissionError` if a role without access hits the route directly by URL.
+- Route-level protection is real but hand-written per page, and inconsistent in _how_ each page checks: `app/settings/page.tsx` does `if (profile.user.role !== "owner") redirect("/dashboard")`; `app/inventory/page.tsx` does `if (role === "cashier" || role === "accountant") redirect("/dashboard")`; `app/pos/page.tsx` does `if (role !== "shift_supervisor" && role !== "cashier") redirect("/dashboard")`; `app/dashboard/page.tsx` is the one page that calls the shared `hasPermission(...)` helper, and renders a welcome card instead of redirecting (redirecting dashboard → dashboard would loop). Every page redirects denied roles to `/dashboard` today, confirmed against `e2e/auth-rbac.spec.ts`'s six existing role-access cases — but each page spells out its own list of allowed/denied role names by hand instead of going through one shared check, so keeping 14 pages' hardcoded role lists in sync with each other (and with the sidebar) is exactly the kind of duplication that causes drift.
 
 Goal (per user request, 2026-07-30): every role sees the _same_ sidebar menu, with items the role isn't allowed to use shown disabled rather than hidden; the shop owner can turn page access on or off per role from a settings screen, without a code change or redeploy.
 
@@ -19,7 +19,7 @@ Goal (per user request, 2026-07-30): every role sees the _same_ sidebar menu, wi
 
 - A new page-level access control layer: can a given role open a given page at all. Owner-configurable, stored in the database, changeable at runtime.
 - Uniform sidebar: all nav items always render for every role; items the current role can't access are visually disabled (greyed out, unclickable) instead of removed.
-- A consistent "you don't have access to this page" screen used by every page, replacing the three different (or absent) patterns that exist today.
+- One shared server-side gate that every page calls, replacing each page's own hand-written role-name check — same observable behavior (redirect denied roles to `/dashboard`, confirmed against `e2e/auth-rbac.spec.ts`), but driven by the new database table instead of a hardcoded role list copy-pasted per file.
 - An owner-only settings screen: one checkbox grid (14 pages × 6 roles) to grant/restrict page access, plus a "reset to default" action.
 - A change history (audit log) of who changed which role's access to which page, and when.
 - Seed data at migration time that reproduces today's exact access behavior, so shipping this changes nothing until the owner deliberately edits it.
@@ -102,22 +102,18 @@ export function canAccessPage(
 }
 ```
 
-`getRolePagePermissionMap` uses `unstable_cache` keyed on `["role-page-permissions"]` with tag `"role-page-permissions"`; the settings-screen save action calls `revalidateTag("role-page-permissions")` after writing.
+No caching layer is added — nothing else in this codebase caches a DB read (`getOrCreateCompanySettings()` queries fresh every call), and the table is small (≤ 90 rows), so `getRolePagePermissionMap` just queries `prisma.rolePagePermission.findMany()` directly each call, staying consistent with existing conventions.
 
-**Every page** (`app/*/page.tsx`) adopts one shared pattern, replacing whatever it does today:
+**Every page** (`app/*/page.tsx`) adopts one shared gate, replacing its own hand-written role check:
 
 ```ts
 const permMap = await getRolePagePermissionMap();
 if (!canAccessPage(profile.user.role, "settings", permMap)) {
-  return (
-    <AppShell user={profile.user} logoutAction={logout}>
-      <NoPermissionCard />
-    </AppShell>
-  );
+  redirect("/dashboard");
 }
 ```
 
-`NoPermissionCard` is a new shared component (`components/no-permission-card.tsx`), generalizing the card `app/dashboard/page.tsx` already renders for roles without dashboard access, so all 14 pages show the identical message instead of three different behaviors (silent redirect, custom card, unhandled crash).
+This preserves the exact behavior `e2e/auth-rbac.spec.ts` already asserts (denied role → redirected to `/dashboard`) — the change is that the allow/deny decision now comes from one shared helper reading the database, instead of each page spelling out its own list of role names. `app/dashboard/page.tsx` keeps its existing `hasPermission(...)` + welcome-card special case (a page can't redirect to itself); everything else about that page is unchanged.
 
 This does not touch `lib/permissions.ts` or any Server Action's `requirePermission()` calls — those remain the authority for create/update/delete/approve actions inside a page a role is allowed to open.
 
@@ -147,7 +143,8 @@ New tab on the existing `/settings` page (owner-only, matching the page's existi
 
 - Unit: `canAccessPage` across all 6 roles × 14 `PageKey`s, including the owner-always-true case and the no-row-means-false case.
 - Unit: settings-screen save action — writes only changed rows, writes exactly one log row per changed cell, writes zero rows when nothing changed.
-- e2e (Playwright), one scenario: owner disables "reports" for `cashier` → log in as cashier → sidebar shows "รายงาน" disabled/unclickable → direct navigation to `/reports` renders `NoPermissionCard` instead of report data or a crash.
+- e2e (Playwright), one new scenario: owner disables "reports" for `accountant` (who has access today) → log in as accountant → sidebar shows "รายงาน" disabled/unclickable → direct navigation to `/reports` redirects to `/dashboard` (same assertion style as the existing six cases in `auth-rbac.spec.ts`).
+- The existing six cases in `e2e/auth-rbac.spec.ts` must still pass unmodified after the migration seed (§7) — they're the regression guard proving the cutover changed no default behavior.
 
 ## 9. Relationship to existing RBAC decision log
 

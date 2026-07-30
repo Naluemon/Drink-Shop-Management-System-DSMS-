@@ -38,7 +38,9 @@
 
 - [ ] **Step 1: Install the dependency**
 
-Run: `npm install xlsx`
+Run: `npm install https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz`
+
+**Do not run plain `npm install xlsx`** — npm's last published release (0.18.5) carries two unpatched high-severity advisories (prototype pollution CVSS 7.8, ReDoS CVSS 7.5) with no fix available through the registry; SheetJS stopped publishing patched releases to npm and now distributes them only from their own CDN. This matters here specifically because this library parses user-uploaded files — exactly the attack surface both bugs exploit. The CDN command installs the current patched release (0.20.3 as of this writing) instead.
 
 - [ ] **Step 2: Write the failing tests**
 

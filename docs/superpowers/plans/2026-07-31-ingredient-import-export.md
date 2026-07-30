@@ -54,6 +54,16 @@ interface Row {
 }
 
 describe("buildSpreadsheet + parseSpreadsheet round-trip", () => {
+  // Note: xlsx's sheet_to_json always applies numeric type-inference to
+  // numeric-looking cell text, regardless of source (its own round-tripped
+  // output or a plain external CSV) — it cannot preserve "5" as a string
+  // while also inferring "1"/"2" as numbers, and nothing downstream needs
+  // it to: every numeric import column is parsed with z.coerce.number()
+  // (features/ingredients/schemas/ingredient-import.schema.ts, Task 2),
+  // which accepts either a string or a number input equally. So these
+  // assertions check by value (via String()/Number()), never by exact JS
+  // type — asserting an exact type here would just be pinning an
+  // implementation detail of the xlsx library that nothing relies on.
   it("round-trips rows through xlsx format", () => {
     const rows: Row[] = [
       { name: "ก", amount: "10" },
@@ -68,8 +78,10 @@ describe("buildSpreadsheet + parseSpreadsheet round-trip", () => {
     const parsed = parseSpreadsheet(buffer);
 
     expect(parsed).toHaveLength(2);
-    expect(parsed[0]).toEqual({ ชื่อ: "ก", จำนวน: "10" });
-    expect(parsed[1]).toEqual({ ชื่อ: "ข", จำนวน: "20" });
+    expect(parsed[0]["ชื่อ"]).toBe("ก");
+    expect(String(parsed[0]["จำนวน"])).toBe("10");
+    expect(parsed[1]["ชื่อ"]).toBe("ข");
+    expect(String(parsed[1]["จำนวน"])).toBe("20");
   });
 
   it("round-trips rows through csv format", () => {
@@ -82,16 +94,19 @@ describe("buildSpreadsheet + parseSpreadsheet round-trip", () => {
     const buffer = buildSpreadsheet(rows, columns, "csv");
     const parsed = parseSpreadsheet(buffer);
 
-    expect(parsed).toEqual([{ name: "test", amount: "5" }]);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].name).toBe("test");
+    expect(String(parsed[0].amount)).toBe("5");
   });
 
   it("parses a plain csv buffer not produced by buildSpreadsheet", () => {
     const buffer = Buffer.from("name,amount\nfoo,1\nbar,2\n", "utf8");
     const parsed = parseSpreadsheet(buffer);
-    expect(parsed).toEqual([
-      { name: "foo", amount: 1 },
-      { name: "bar", amount: 2 },
-    ]);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].name).toBe("foo");
+    expect(Number(parsed[0].amount)).toBe(1);
+    expect(parsed[1].name).toBe("bar");
+    expect(Number(parsed[1].amount)).toBe(2);
   });
 
   it("returns an empty array for a header-only file", () => {

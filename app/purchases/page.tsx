@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
-import { getRolePagePermissionMap, canAccessPage } from "@/lib/page-access";
+import { canAccessPage } from "@/lib/page-access";
+import { getRolePagePermissionMap } from "@/lib/page-access-server";
 import { listPurchaseOrders } from "@/features/purchases/actions/purchase-orders";
 import { listSuppliers } from "@/features/purchases/actions/suppliers";
 import { listIngredients } from "@/features/ingredients/actions/ingredients";

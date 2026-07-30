@@ -1,5 +1,11 @@
-import { prisma } from "@/lib/prisma";
 import type { UserRole } from "@/lib/generated/prisma/enums";
+
+// Client-safe on purpose: everything below is pure (no I/O), so it's cheap to
+// import from a "use client" component tree (components/nav-config.ts ->
+// components/app-shell.tsx does exactly this, for canAccessPage). The one
+// DB-touching function this feature needs, getRolePagePermissionMap(), lives
+// in the sibling ./page-access-server.ts instead — see that file's comment
+// for why mixing the two here crashes the browser build.
 
 // The 13 pages this table gates. /dashboard and /guide are deliberately
 // excluded — see docs/superpowers/specs/2026-07-30-role-page-permissions-design.md §2:
@@ -35,17 +41,6 @@ export const NON_OWNER_ROLES = [
 ] as const satisfies readonly UserRole[];
 
 export type RolePagePermissionMap = Record<PageKey, Set<UserRole>>;
-
-export async function getRolePagePermissionMap(): Promise<RolePagePermissionMap> {
-  const rows = await prisma.rolePagePermission.findMany({ where: { allowed: true } });
-  const map = Object.fromEntries(
-    PAGE_KEYS.map((key) => [key, new Set<UserRole>()]),
-  ) as RolePagePermissionMap;
-  for (const row of rows) {
-    map[row.pageKey as PageKey]?.add(row.role);
-  }
-  return map;
-}
 
 // owner always passes, independent of the table — this is the actual
 // enforcement behind "owner can never be locked out," not just a UI

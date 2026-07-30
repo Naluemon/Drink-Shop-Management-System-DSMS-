@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
-import { getRolePagePermissionMap, canAccessPage } from "@/lib/page-access";
+import { canAccessPage } from "@/lib/page-access";
+import { getRolePagePermissionMap } from "@/lib/page-access-server";
 import { getPosMenuData } from "@/features/pos/actions/pos-menu";
 import { listRecentTransactions } from "@/features/pos/actions/void-refund";
 import { AppShell } from "@/components/app-shell";

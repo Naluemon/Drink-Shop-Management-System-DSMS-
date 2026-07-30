@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
-import { getRolePagePermissionMap, canAccessPage } from "@/lib/page-access";
+import { canAccessPage } from "@/lib/page-access";
+import { getRolePagePermissionMap } from "@/lib/page-access-server";
 import { listMenus, listMenuCategories, getRecipeOptions } from "@/features/menus/actions/menus";
 import { listModifierGroups } from "@/features/menus/actions/modifier-groups";
 import { calculateRecipeCost } from "@/lib/cost-cascade";

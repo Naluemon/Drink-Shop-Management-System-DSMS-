@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
 import { hasPermission } from "@/lib/permissions";
-import { getRolePagePermissionMap } from "@/lib/page-access";
+import { getRolePagePermissionMap } from "@/lib/page-access-server";
 import { getDashboardData } from "@/features/dashboard/actions/dashboard";
 import { AppShell } from "@/components/app-shell";
 import { DashboardContent } from "@/features/dashboard/components/dashboard-content";

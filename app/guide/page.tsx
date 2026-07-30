@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
-import { getRolePagePermissionMap } from "@/lib/page-access";
+import { getRolePagePermissionMap } from "@/lib/page-access-server";
 import { AppShell } from "@/components/app-shell";
 import { GuideContent } from "@/features/guide/components/guide-content";
 

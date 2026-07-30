@@ -48,9 +48,13 @@ export async function GET(request: Request) {
             if (ownerCount > 0) {
               throw new Error("NOT_BOOTSTRAP");
             }
+            // Phase A (multi-tenant-phase-a-isolation): exactly one
+            // Organization exists until Phase B's self-service signup.
+            const organization = await tx.organization.findFirstOrThrow();
             await tx.user.create({
               data: {
                 id: authData.user.id,
+                organizationId: organization.id,
                 email: authData.user.email!,
                 fullName:
                   authData.user.user_metadata?.full_name || authData.user.email!.split("@")[0],
@@ -91,6 +95,7 @@ export async function GET(request: Request) {
         await prisma.user.create({
           data: {
             id: authData.user.id,
+            organizationId: invite.organizationId,
             email: authData.user.email!,
             fullName: authData.user.user_metadata?.full_name || authData.user.email!.split("@")[0],
             role: invite.role,

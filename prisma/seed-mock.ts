@@ -29,6 +29,7 @@ function daysAgo(n: number): Date {
 async function main() {
   const branch = await prisma.branch.findFirstOrThrow();
   const branchId = branch.id;
+  const organizationId = branch.organizationId;
 
   const users = await prisma.user.findMany();
   const byRole = (role: string) => users.find((u) => u.role === role) ?? users[0];
@@ -999,7 +1000,7 @@ async function main() {
     const exists = await prisma.user.findUnique({ where: { email } });
     if (exists) continue;
     await prisma.user.create({
-      data: { email, fullName: def.fullName, role: def.role, isActive: true },
+      data: { organizationId, email, fullName: def.fullName, role: def.role, isActive: true },
     });
   }
 
@@ -1012,6 +1013,7 @@ async function main() {
     if (exists) continue;
     await prisma.userInvite.create({
       data: {
+        organizationId,
         email,
         role: inviteRoles[i],
         invitedById: owner.id,

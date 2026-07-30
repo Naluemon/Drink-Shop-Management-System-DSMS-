@@ -53,7 +53,7 @@ export async function createSupplier(input: SupplierInput) {
   const result = supplierSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const existing = await prisma.supplier.findFirst({
     where: {

@@ -76,6 +76,7 @@ export async function createInvite(input: InviteInput) {
   try {
     await prisma.userInvite.create({
       data: {
+        organizationId: inviter.organizationId,
         email: input.email,
         role: input.role,
         invitedById: user.id,
@@ -146,6 +147,7 @@ export async function acceptInvite(token: string, formData: FormData) {
     await prisma.user.create({
       data: {
         id: authData.user.id,
+        organizationId: invite.organizationId,
         email: invite.email,
         fullName: invite.email.split("@")[0],
         role: invite.role,

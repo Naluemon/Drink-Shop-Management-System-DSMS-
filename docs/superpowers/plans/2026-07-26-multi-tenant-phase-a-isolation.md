@@ -2806,3 +2806,28 @@ The following modules were **not** touched by this plan and still query without 
 - `features/auth/actions/invite.ts`, `features/auth/actions/bootstrap.ts` (`bootstrap.ts` is retired entirely in Phase B, not converted)
 
 Each follows the exact same conversion pattern demonstrated in Tasks 4-9 above.
+
+### RLS is enabled but not yet load-bearing — do not switch `DATABASE_URL`'s role until every module above is converted
+
+Task 2 enabled RLS and proved the policy SQL correct, but discovered the app's
+actual `DATABASE_URL` role (`postgres`) has `BYPASSRLS = true` on Supabase Cloud,
+and that attribute cannot be stripped from that role (`ALTER ROLE postgres
+NOBYPASSRLS` → permission denied — a platform restriction). RLS is therefore
+currently a defined-but-inert safety net: real enforcement requires switching
+`DATABASE_URL` to a dedicated non-bypassing role (see Task 2's report for the
+exact `CREATE ROLE ... NOBYPASSRLS` + `GRANT` statements already proven to work).
+
+**This switch must not happen until every module — this plan's 7 (Tasks 4-9) AND
+every module listed above — routes its queries through `withOrgScope()`
+(`lib/tenant-scope.ts`, Task 3).** Any module still calling the raw `prisma`
+singleton directly would silently return zero rows / fail every write the moment
+the connection stops bypassing RLS, since nothing sets `app.current_org_id` for
+it. Since the modules above are explicitly out of this plan's scope, the role
+switch is also out of this plan's scope — it belongs as the final task of
+whichever follow-up plan finishes converting them, after which `withOrgScope()`
+truly covers every tenant-scoped query in the app and switching the role is safe.
+
+Until then, RLS enabled-but-bypassed is the correct and intentional state — it
+matches Phase A's "zero visible change" goal (Design Spec §8) exactly, and still
+gives you a fully-proven-correct policy set ready to switch on the moment
+coverage is complete, rather than nothing.

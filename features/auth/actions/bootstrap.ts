@@ -57,9 +57,13 @@ export async function bootstrapOwner(formData: FormData) {
         if (ownerCount > 0) {
           throw new Error("OWNER_ALREADY_EXISTS");
         }
+        // Phase A (multi-tenant-phase-a-isolation): exactly one Organization
+        // exists until Phase B's self-service signup.
+        const organization = await tx.organization.findFirstOrThrow();
         await tx.user.create({
           data: {
             id: authData.user!.id,
+            organizationId: organization.id,
             email,
             fullName,
             role: "owner",

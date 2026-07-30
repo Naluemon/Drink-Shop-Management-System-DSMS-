@@ -189,7 +189,7 @@ export async function checkout(input: CheckoutInput) {
     resolvedLines.push(resolved);
   }
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
   const taxSettings = await getOrCreateTaxSettings();
   const companySettings = await getOrCreateCompanySettings();
 

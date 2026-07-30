@@ -77,7 +77,7 @@ export async function createRecipe(input: RecipeInput) {
   const result = recipeSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const existing = await prisma.recipe.findFirst({
     where: {

@@ -9,7 +9,7 @@ Today the sidebar menu and the underlying access rules are two different hardcod
 
 - `components/nav-config.ts` computes, at module load, which roles see which nav items by deriving from the static CRUD matrix in `lib/permissions.ts` (`rolesWithAnyAccess`). A role with zero access to a resource never sees the link at all — it's removed from the list, not disabled.
 - The owner cannot change any of this from the UI. Changing what a role can access means editing `lib/permissions.ts` and redeploying.
-- Route-level protection is real but hand-written per page, and inconsistent in _how_ each page checks: `app/settings/page.tsx` does `if (profile.user.role !== "owner") redirect("/dashboard")`; `app/inventory/page.tsx` does `if (role === "cashier" || role === "accountant") redirect("/dashboard")`; `app/pos/page.tsx` does `if (role !== "shift_supervisor" && role !== "cashier") redirect("/dashboard")`; `app/dashboard/page.tsx` is the one page that calls the shared `hasPermission(...)` helper, and renders a welcome card instead of redirecting (redirecting dashboard → dashboard would loop). Every page redirects denied roles to `/dashboard` today, confirmed against `e2e/auth-rbac.spec.ts`'s six existing role-access cases — but each page spells out its own list of allowed/denied role names by hand instead of going through one shared check, so keeping 14 pages' hardcoded role lists in sync with each other (and with the sidebar) is exactly the kind of duplication that causes drift.
+- Route-level protection is real but hand-written per page, and inconsistent in _how_ each page checks: `app/settings/page.tsx` does `if (profile.user.role !== "owner") redirect("/dashboard")`; `app/inventory/page.tsx` does `if (role === "cashier" || role === "accountant") redirect("/dashboard")`; `app/pos/page.tsx` does `if (role !== "shift_supervisor" && role !== "cashier") redirect("/dashboard")`; `app/dashboard/page.tsx` is the one page that calls the shared `hasPermission(...)` helper, and renders a welcome card instead of redirecting (redirecting dashboard → dashboard would loop). Every page redirects denied roles to `/dashboard` today, confirmed against `e2e/auth-rbac.spec.ts`'s six existing role-access cases — but each page spells out its own list of allowed/denied role names by hand instead of going through one shared check, so keeping 13 pages' hardcoded role lists in sync with each other (and with the sidebar) is exactly the kind of duplication that causes drift.
 
 Goal (per user request, 2026-07-30): every role sees the _same_ sidebar menu, with items the role isn't allowed to use shown disabled rather than hidden; the shop owner can turn page access on or off per role from a settings screen, without a code change or redeploy.
 
@@ -20,7 +20,7 @@ Goal (per user request, 2026-07-30): every role sees the _same_ sidebar menu, wi
 - A new page-level access control layer: can a given role open a given page at all. Owner-configurable, stored in the database, changeable at runtime.
 - Uniform sidebar: all nav items always render for every role; items the current role can't access are visually disabled (greyed out, unclickable) instead of removed.
 - One shared server-side gate that every page calls, replacing each page's own hand-written role-name check — same observable behavior (redirect denied roles to `/dashboard`, confirmed against `e2e/auth-rbac.spec.ts`), but driven by the new database table instead of a hardcoded role list copy-pasted per file.
-- An owner-only settings screen: one checkbox grid (14 pages × 6 roles) to grant/restrict page access, plus a "reset to default" action.
+- An owner-only settings screen: one checkbox grid (13 pages × 6 roles) to grant/restrict page access, plus a "reset to default" action.
 - A change history (audit log) of who changed which role's access to which page, and when.
 - Seed data at migration time that reproduces today's exact access behavior, so shipping this changes nothing until the owner deliberately edits it.
 
@@ -29,6 +29,7 @@ Goal (per user request, 2026-07-30): every role sees the _same_ sidebar menu, wi
 - Per-action (create/view/update/delete/approve/...) configurability. The existing CRUD matrix in `lib/permissions.ts` keeps governing what a role can _do_ once inside a page (e.g. whether Cashier sees a "create purchase order" button) — this design only controls whether the page opens at all.
 - Changing the fixed list of 6 roles (`owner`, `manager`, `shift_supervisor`, `cashier`, `employee`, `accountant`). No custom roles.
 - Any change to `/guide` — it has no data behind it and stays open to every role, as today.
+- Any change to `/dashboard`'s access rule. It's the universal post-login landing page and the redirect target every other page's denial check sends a role to (§4) — an owner making it toggle-off-able would be able to strand a role with nowhere to land after login, or send a denied role's redirect into another denied page. It keeps its existing `hasPermission(role, "view", "dashboard")` check untouched: roles without dashboard "view" still land there and see the existing welcome card instead of KPI widgets, exactly as today. The sidebar's "แดชบอร์ด" item is always enabled for every role, same as "คู่มือการใช้งาน".
 - File import/export and duplicate-detection (separate design, tracked as a follow-up sub-project).
 - General data-entry speed/UX improvements (separate design, tracked as a follow-up sub-project).
 
@@ -38,7 +39,7 @@ Goal (per user request, 2026-07-30): every role sees the _same_ sidebar menu, wi
 model RolePagePermission {
   id        String   @id @default(uuid())
   role      UserRole
-  pageKey   String              // one of the 14 PageKey values, see §4
+  pageKey   String              // one of the 13 PageKey values, see §4
   allowed   Boolean
   updatedAt DateTime @updatedAt
   updatedBy String?             // User.id of the owner who last changed this row; null = untouched since seed
@@ -65,11 +66,10 @@ model PermissionChangeLog {
 
 ## 4. Central access-control helper
 
-New `PageKey` union covering the 14 pages that currently appear in `NAV_GROUPS` minus `/guide`:
+New `PageKey` union covering the 13 pages that currently appear in `NAV_GROUPS`, minus `/guide` and `/dashboard` (both excluded per §2 — universally accessible, not owner-toggleable):
 
 ```ts
 export type PageKey =
-  | "dashboard"
   | "pos"
   | "refunds"
   | "ingredients"
@@ -126,9 +126,9 @@ This does not touch `lib/permissions.ts` or any Server Action's `requirePermissi
 
 New tab on the existing `/settings` page (owner-only, matching the page's existing owner-only gate): **"สิทธิ์การใช้งานตามตำแหน่ง"**.
 
-- Grid: 14 rows (pages) × 6 columns (roles), checkboxes.
+- Grid: 13 rows (pages) × 6 columns (roles), checkboxes.
 - The `owner` column is checked and disabled on every row — cannot be unchecked, matching §3/§4.
-- **Save**: diffs the grid against the currently loaded permissions, upserts only the rows that changed into `RolePagePermission`, inserts one `PermissionChangeLog` row per changed cell, all inside one transaction, then `revalidateTag("role-page-permissions")`.
+- **Save**: diffs the grid against the currently loaded permissions, upserts only the rows that changed into `RolePagePermission`, inserts one `PermissionChangeLog` row per changed cell, all inside one transaction, then `redirect`/revalidate the settings page (no cache-tag to invalidate — §4 reads the table directly on every call).
 - **Reset to default**: restores every non-owner row to the seed values from §7 (also logged, one row per cell that actually changes).
 - Below the grid, a **change history** table: newest first, columns "เมื่อไหร่ / ใคร / role ไหน / หน้าไหน / เปิด→ปิด หรือ ปิด→เปิด", 50 rows per page with simple "load more" pagination.
 
@@ -140,7 +140,7 @@ New tab on the existing `/settings` page (owner-only, matching the page's existi
 
 ## 8. Testing plan
 
-- Unit: `canAccessPage` across all 6 roles × 14 `PageKey`s, including the owner-always-true case and the no-row-means-false case.
+- Unit: `canAccessPage` across all 6 roles × 13 `PageKey`s, including the owner-always-true case and the no-row-means-false case.
 - Unit: settings-screen save action — writes only changed rows, writes exactly one log row per changed cell, writes zero rows when nothing changed.
 - e2e (Playwright), one new scenario: owner disables "reports" for `accountant` (who has access today) → log in as accountant → sidebar shows "รายงาน" disabled/unclickable → direct navigation to `/reports` redirects to `/dashboard` (same assertion style as the existing six cases in `auth-rbac.spec.ts`).
 - The existing six cases in `e2e/auth-rbac.spec.ts` must still pass unmodified after the migration seed (§7) — they're the regression guard proving the cutover changed no default behavior.

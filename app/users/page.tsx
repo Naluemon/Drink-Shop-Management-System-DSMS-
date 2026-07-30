@@ -22,6 +22,12 @@ export default async function UsersPage() {
   if (!canAccessPage(role, "users", permMap)) {
     redirect("/dashboard");
   }
+  if (role !== "owner" && role !== "manager") {
+    // canAccessPage only gates *page* access — an owner could in principle grant
+    // "users" page access to another role, but the invite UI below is only ever
+    // built for owner/manager. Redirect rather than render it broken for anyone else.
+    redirect("/dashboard");
+  }
 
   const usersResult = role === "owner" ? await listUsers() : null;
 
@@ -39,7 +45,7 @@ export default async function UsersPage() {
                 : "เชิญพนักงานใหม่เข้าใช้งานระบบ"}
             </p>
           </div>
-          <InviteUserDialog actorRole={role === "owner" ? "owner" : "manager"} />
+          <InviteUserDialog actorRole={role} />
         </div>
 
         {role === "owner" && usersResult && (

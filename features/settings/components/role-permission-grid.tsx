@@ -7,7 +7,7 @@ import {
   resetRolePagePermissionsToDefault,
   type RolePagePermissionRow,
 } from "../actions/role-page-permissions";
-import { PAGE_KEYS, type PageKey } from "@/lib/page-access";
+import { PAGE_KEYS, type PageKey, buildDefaultPermissionChanges } from "@/lib/page-access";
 import { PAGE_KEY_LABELS, ROLE_LABELS } from "@/components/nav-config";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -59,7 +59,7 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
   const [baseline, setBaseline] = useState(() => buildGrid(initialRows));
   const [grid, setGrid] = useState(() => buildGrid(initialRows));
   const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -69,7 +69,7 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
 
   function toggle(pageKey: PageKey, role: EditableRole) {
     setError(null);
-    setSavedAt(null);
+    setConfirmMessage(null);
     setGrid((prev) => ({
       ...prev,
       [pageKey]: { ...prev[pageKey], [role]: !prev[pageKey][role] },
@@ -91,7 +91,7 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
         return;
       }
       setBaseline(grid);
-      setSavedAt(Date.now());
+      setConfirmMessage("บันทึกสำเร็จ");
       router.refresh();
     });
   }
@@ -105,6 +105,10 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
         setError(result.error);
         return;
       }
+      const defaultGrid = buildGrid(buildDefaultPermissionChanges());
+      setGrid(defaultGrid);
+      setBaseline(defaultGrid);
+      setConfirmMessage("รีเซ็ตสำเร็จ");
       router.refresh();
     });
   }
@@ -165,7 +169,7 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
         >
           รีเซ็ตเป็นค่าเริ่มต้น
         </Button>
-        {savedAt && <p className="text-accent text-xs">บันทึกสำเร็จ</p>}
+        {confirmMessage && <p className="text-accent text-xs">{confirmMessage}</p>}
       </div>
       <ConfirmDialog
         open={confirmResetOpen}

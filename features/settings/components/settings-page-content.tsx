@@ -13,6 +13,8 @@ import {
   IngredientDeficitOverrides,
   type IngredientOverrideRow,
 } from "./ingredient-deficit-overrides";
+import { RolePermissionGrid } from "./role-permission-grid";
+import type { RolePagePermissionRow } from "../actions/role-page-permissions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +53,7 @@ interface SettingsPageContentProps {
   taxSettings: TaxSettingsData;
   ingredients: IngredientOverrideRow[];
   reasonCodes: ReasonCodeRow[];
+  rolePagePermissionRows: RolePagePermissionRow[];
 }
 
 function SavedNote({ savedAt }: { savedAt: number | null }) {
@@ -457,6 +460,7 @@ export function SettingsPageContent({
   taxSettings,
   ingredients,
   reasonCodes,
+  rolePagePermissionRows,
 }: SettingsPageContentProps) {
   return (
     <div className="space-y-6">
@@ -473,6 +477,18 @@ export function SettingsPageContent({
         </CardHeader>
         <CardContent>
           <ReasonCodeManager initialCodes={reasonCodes} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">สิทธิ์การใช้งานตามตำแหน่ง</CardTitle>
+          <CardDescription>
+            เลือกได้ว่าตำแหน่งไหนเข้าหน้าเมนูไหนได้บ้าง — เจ้าของร้านเข้าได้ทุกหน้าเสมอ
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RolePermissionGrid initialRows={rolePagePermissionRows} />
         </CardContent>
       </Card>
 

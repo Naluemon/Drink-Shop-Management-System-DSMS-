@@ -168,6 +168,36 @@ model UserInvite {
   @@map("user_invites")
 }
 
+// Owner-configurable "can this role open this page at all" table — replaces
+// the hardcoded per-page role checks in app/*/page.tsx (see
+// docs/superpowers/specs/2026-07-30-role-page-permissions-design.md).
+// `owner` intentionally never gets a row here — lib/page-access.ts's
+// canAccessPage() hardcodes owner to always pass, independent of this table.
+model RolePagePermission {
+  id        String   @id @default(uuid())
+  role      UserRole
+  pageKey   String   @map("page_key")
+  allowed   Boolean
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by") // null = untouched since the deploy-time seed
+
+  @@unique([role, pageKey])
+  @@map("role_page_permissions")
+}
+
+/// Append-only audit trail for RolePagePermission edits made through the
+/// Settings screen. Never updated or deleted, only inserted.
+model PermissionChangeLog {
+  id        String   @id @default(uuid())
+  role      UserRole
+  pageKey   String   @map("page_key")
+  allowed   Boolean
+  changedBy String   @map("changed_by")
+  changedAt DateTime @default(now()) @map("changed_at")
+
+  @@map("permission_change_logs")
+}
+
 // ============================================================================
 // Settings — DATABASE.md §10, §11, DECISIONS.md D8, D9, D16
 // Singleton-style tables (expected to hold exactly one row in MVP single-branch scope)

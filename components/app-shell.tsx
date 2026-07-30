@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, ChevronDown, User, LogOut } from "lucide-react";
 import { BrandIcon } from "@/components/brand-mark";
-import { NAV_GROUPS, ROLE_LABELS } from "@/components/nav-config";
+import { getNavItemsWithState, ROLE_LABELS } from "@/components/nav-config";
+import type { RolePagePermissionMap } from "@/lib/page-access";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import type { UserRole } from "@/lib/generated/prisma/enums";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ import {
 interface AppShellProps {
   user: { fullName: string; email: string; role: string };
   logoutAction: () => void | Promise<void>;
+  permMap: RolePagePermissionMap;
   children: React.ReactNode;
 }
 
@@ -29,7 +31,7 @@ interface AppShellProps {
 // bar now that there are enough sections (Phase 3-7) that a single row of
 // links no longer scales. Desktop: sidebar always visible. Mobile: slides
 // in from a hamburger trigger.
-export function AppShell({ user, logoutAction, children }: AppShellProps) {
+export function AppShell({ user, logoutAction, permMap, children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -37,6 +39,7 @@ export function AppShell({ user, logoutAction, children }: AppShellProps) {
       <Sidebar
         user={user}
         logoutAction={logoutAction}
+        permMap={permMap}
         className="hidden lg:flex"
         onNavigate={() => {}}
       />
@@ -51,6 +54,7 @@ export function AppShell({ user, logoutAction, children }: AppShellProps) {
           <Sidebar
             user={user}
             logoutAction={logoutAction}
+            permMap={permMap}
             className="relative flex"
             onNavigate={() => setMobileOpen(false)}
             onClose={() => setMobileOpen(false)}
@@ -83,22 +87,21 @@ export function AppShell({ user, logoutAction, children }: AppShellProps) {
 function Sidebar({
   user,
   logoutAction,
+  permMap,
   className,
   onNavigate,
   onClose,
 }: {
   user: { fullName: string; email: string; role: string };
   logoutAction: () => void | Promise<void>;
+  permMap: RolePagePermissionMap;
   className?: string;
   onNavigate: () => void;
   onClose?: () => void;
 }) {
   const pathname = usePathname();
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
-  const visibleGroups = NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => item.roles.has(user.role as UserRole)),
-  })).filter((group) => group.items.length > 0);
+  const groups = getNavItemsWithState(user.role as UserRole, permMap);
 
   const initials = user.fullName
     .trim()
@@ -135,13 +138,31 @@ function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
-        {visibleGroups.map((group) => (
+        {groups.map((group) => (
           <div key={group.label}>
             <p className="text-muted-foreground px-2.5 pb-1.5 text-xs font-medium">{group.label}</p>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
                 const Icon = item.icon;
+                const content = (
+                  <>
+                    <Icon className="size-4 shrink-0" />
+                    {item.label}
+                  </>
+                );
+                if (item.disabled) {
+                  return (
+                    <li key={item.href}>
+                      <span
+                        aria-disabled="true"
+                        className="text-muted-foreground flex cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium opacity-50"
+                      >
+                        {content}
+                      </span>
+                    </li>
+                  );
+                }
                 return (
                   <li key={item.href}>
                     <Link
@@ -154,8 +175,7 @@ function Sidebar({
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       )}
                     >
-                      <Icon className="size-4 shrink-0" />
-                      {item.label}
+                      {content}
                     </Link>
                   </li>
                 );

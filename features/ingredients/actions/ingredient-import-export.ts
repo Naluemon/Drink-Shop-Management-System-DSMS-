@@ -6,7 +6,10 @@ import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { parseSpreadsheet, buildSpreadsheet, type SpreadsheetColumn } from "@/lib/spreadsheet";
 import { recordStockIn } from "@/features/inventory/actions/inventory";
-import { INGREDIENT_IMPORT_COLUMNS } from "../schemas/ingredient-import.schema";
+import {
+  INGREDIENT_IMPORT_COLUMNS,
+  parsedIngredientRowSchema,
+} from "../schemas/ingredient-import.schema";
 import { validateImportRows, type ParsedIngredientRow } from "../lib/validate-import";
 
 async function getActor() {
@@ -62,7 +65,17 @@ export async function previewIngredientImport(
   }
 
   const buffer = Buffer.from(fileBase64, "base64");
-  const rawRows = parseSpreadsheet(buffer).map(sanitizeRawRow);
+  let rawRows: Record<string, unknown>[];
+  try {
+    rawRows = parseSpreadsheet(buffer).map(sanitizeRawRow);
+  } catch {
+    // XLSX.read throws on a corrupt/unsupported/password-protected file (a
+    // renamed .txt, a truncated .xlsx, etc.) — an ordinary user-interaction
+    // case for a file-import feature, not an edge case. Surface it the same
+    // way every other failure in this file is surfaced instead of letting
+    // the promise reject unhandled.
+    return { error: "ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบว่าเป็นไฟล์ .xlsx หรือ .csv ที่ถูกต้อง" };
+  }
   if (rawRows.length > MAX_IMPORT_ROWS) {
     return { error: `ไฟล์มีข้อมูลเกิน ${MAX_IMPORT_ROWS} แถว กรุณาแบ่งไฟล์` };
   }
@@ -86,6 +99,11 @@ export async function commitIngredientImport(rows: ParsedIngredientRow[]): Promi
       // an error instead of throwing — see the loop below. Not counted in
       // createdCount.
       stockInFailures: { rowNumber: number; name: string; reason: string }[];
+      // Rows that failed re-validation against parsedIngredientRowSchema
+      // (see the comment above that schema) and were skipped before ever
+      // reaching Prisma — e.g. a crafted/buggy request with a negative
+      // costPerUnit or an invalid baseUnit. Not counted in createdCount.
+      invalidRows: { rowNumber: number; name: string; reason: string }[];
     }
 > {
   const actor = await getActor();
@@ -100,12 +118,41 @@ export async function commitIngredientImport(rows: ParsedIngredientRow[]): Promi
     return { error: `ไฟล์มีข้อมูลเกิน ${MAX_IMPORT_ROWS} แถว กรุณาแบ่งไฟล์` };
   }
 
+  // Defense in depth: rows arrive straight from the browser (the client
+  // round-trips preview.toCreate from a prior previewIngredientImport call
+  // back here), so a crafted/buggy request could hand us anything despite
+  // the ParsedIngredientRow type. Re-validate each row's invariants (the
+  // same ones ingredientImportRowSchema enforced at preview time — no
+  // negative costPerUnit, no negative/zero conversionFactor, a real
+  // baseUnit, etc.) before any of it reaches Prisma. Skip invalid rows
+  // rather than aborting the batch or throwing mid-loop (there is no
+  // transaction wrapping this loop, so a mid-loop throw would leave
+  // earlier rows in this same batch already committed).
+  const invalidRows: { rowNumber: number; name: string; reason: string }[] = [];
+  const validRows: ParsedIngredientRow[] = [];
+  for (const row of rows) {
+    const result = parsedIngredientRowSchema.safeParse(row);
+    if (!result.success) {
+      // row itself may not actually be the shape TS claims at runtime (that's
+      // the whole point of this defensive check), so read these two fields
+      // defensively rather than assuming they exist.
+      const unsafeRow = row as { rowNumber?: unknown; name?: unknown } | null | undefined;
+      invalidRows.push({
+        rowNumber: typeof unsafeRow?.rowNumber === "number" ? unsafeRow.rowNumber : -1,
+        name: typeof unsafeRow?.name === "string" ? unsafeRow.name : "",
+        reason: result.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง",
+      });
+      continue;
+    }
+    validRows.push(row);
+  }
+
   const branch = await getOrCreateDefaultBranch();
   const supplierCache = new Map<string, string>();
   let createdCount = 0;
   const stockInFailures: { rowNumber: number; name: string; reason: string }[] = [];
 
-  for (const row of rows) {
+  for (const row of validRows) {
     // Defense in depth: re-check nothing created this name since preview
     // (e.g. a concurrent import) — skip that one row, don't fail the batch.
     const dup = await prisma.ingredient.findFirst({
@@ -197,7 +244,7 @@ export async function commitIngredientImport(rows: ParsedIngredientRow[]): Promi
     createdCount += 1;
   }
 
-  return { success: true, createdCount, stockInFailures };
+  return { success: true, createdCount, stockInFailures, invalidRows };
 }
 
 const BASE_UNIT_EXPORT_LABELS: Record<string, string> = { gram: "กรัม", ml: "มล.", piece: "ชิ้น" };

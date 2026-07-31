@@ -24,6 +24,11 @@ export function parseSpreadsheet(buffer: Buffer): Record<string, unknown>[] {
   const hasBom = buffer.subarray(0, 3).equals(UTF8_BOM);
   const input = isZip || hasBom ? buffer : Buffer.concat([UTF8_BOM, buffer]);
   const workbook = XLSX.read(input, { type: "buffer" });
+  // A genuinely empty/sheetless workbook is a legitimate empty-file case,
+  // distinct from a truly corrupt buffer (XLSX.read itself throws for that,
+  // which callers already handle) — treat it as "no rows" rather than
+  // letting sheet_to_json throw on an undefined sheet.
+  if (workbook.SheetNames.length === 0) return [];
   const firstSheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[firstSheetName];
   return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: undefined });

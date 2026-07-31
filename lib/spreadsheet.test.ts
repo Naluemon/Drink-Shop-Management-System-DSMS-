@@ -81,4 +81,17 @@ describe("buildSpreadsheet + parseSpreadsheet round-trip", () => {
     const buffer = Buffer.from("name,amount\n", "utf8");
     expect(parseSpreadsheet(buffer)).toEqual([]);
   });
+
+  it("throws (does not silently return garbage) for a corrupt/unsupported buffer", () => {
+    // A leading "PK" zip signature (so parseSpreadsheet's own BOM-prepend
+    // logic treats it as an .xlsx, not plain text) followed by bytes that
+    // aren't a real zip archive — e.g. a truncated/corrupted .xlsx upload.
+    // Callers (previewIngredientImport) are responsible for catching this —
+    // this test just pins that parseSpreadsheet itself still throws rather
+    // than swallowing the error or returning something misleading.
+    const corrupt = Buffer.from([
+      0x50, 0x4b, 0x03, 0x04, 0x00, 0x01, 0x02, 0x03, 0xff, 0xfe, 0x00, 0x99,
+    ]);
+    expect(() => parseSpreadsheet(corrupt)).toThrow();
+  });
 });

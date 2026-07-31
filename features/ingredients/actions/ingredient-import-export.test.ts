@@ -97,6 +97,23 @@ describe("previewIngredientImport", () => {
     expect(result.duplicates).toEqual([{ rowNumber: 3, name: "เกลือ" }]);
   });
 
+  it("returns a handled error for a corrupt/invalid file instead of throwing", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    // A leading "PK" zip signature (a corrupted/truncated .xlsx) followed by
+    // bytes that aren't a real zip archive — XLSX.read throws on this rather
+    // than returning parseable rows.
+    const corruptBase64 = Buffer.from([
+      0x50, 0x4b, 0x03, 0x04, 0x00, 0x01, 0x02, 0x03, 0xff, 0xfe, 0x00, 0x99,
+    ]).toString("base64");
+
+    const result = await previewIngredientImport(corruptBase64);
+
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toMatch(/ไม่สามารถอ่านไฟล์ได้/);
+    }
+  });
+
   it("rejects a file over the row cap without touching the DB", async () => {
     prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
     const rows = Array.from({ length: 501 }, (_, i) => ({
@@ -245,6 +262,73 @@ describe("commitIngredientImport", () => {
     expect(result.stockInFailures).toEqual([
       { rowNumber: 2, name: "สต็อกเข้าไม่สำเร็จ", reason: "คุณไม่มีสิทธิ์รับสินค้าเข้าสต็อก" },
     ]);
+  });
+
+  it("rejects a row with a negative costPerUnit instead of writing it", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.ingredient.findFirst.mockResolvedValue(null as never);
+
+    const result = await commitIngredientImport([
+      {
+        rowNumber: 2,
+        name: "ต้นทุนติดลบ",
+        baseUnit: "gram",
+        costPerUnit: -1,
+        startingStock: 0,
+        lowStockThreshold: null,
+        supplierName: null,
+        purchaseUnitName: null,
+        conversionFactor: null,
+      },
+    ]);
+
+    if ("error" in result) throw new Error("expected success with invalidRows, got error");
+    expect(prismaMock.ingredient.create).not.toHaveBeenCalled();
+    expect(result.createdCount).toBe(0);
+    expect(result.invalidRows).toHaveLength(1);
+    expect(result.invalidRows[0]).toMatchObject({ rowNumber: 2, name: "ต้นทุนติดลบ" });
+  });
+
+  it("rejects a row with an invalid baseUnit without throwing or aborting the rest of the batch", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.ingredient.findFirst.mockResolvedValue(null as never);
+    prismaMock.ingredient.create.mockResolvedValue({ id: "ing-ok" } as never);
+
+    const result = await commitIngredientImport([
+      {
+        rowNumber: 2,
+        name: "หน่วยฐานผิด",
+        // Cast needed to simulate a crafted/malformed payload that bypasses
+        // the ParsedIngredientRow type at runtime (e.g. a hand-crafted
+        // request body) — exactly the case this re-validation guards against.
+        baseUnit: "invalid-unit" as never,
+        costPerUnit: 1,
+        startingStock: 0,
+        lowStockThreshold: null,
+        supplierName: null,
+        purchaseUnitName: null,
+        conversionFactor: null,
+      },
+      {
+        rowNumber: 3,
+        name: "หน่วยฐานถูกต้อง",
+        baseUnit: "gram",
+        costPerUnit: 1,
+        startingStock: 0,
+        lowStockThreshold: null,
+        supplierName: null,
+        purchaseUnitName: null,
+        conversionFactor: null,
+      },
+    ]);
+
+    if ("error" in result) throw new Error("expected success with invalidRows, got error");
+    expect(result.invalidRows).toHaveLength(1);
+    expect(result.invalidRows[0]).toMatchObject({ rowNumber: 2, name: "หน่วยฐานผิด" });
+    // The rest of the batch (row 3, valid) must still be committed — a bad
+    // row must not abort or throw mid-loop.
+    expect(prismaMock.ingredient.create).toHaveBeenCalledTimes(1);
+    expect(result.createdCount).toBe(1);
   });
 
   it("does not call recordStockIn when starting stock is 0", async () => {

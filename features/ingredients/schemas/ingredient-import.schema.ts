@@ -77,3 +77,31 @@ export const ingredientImportRowSchema = z
   });
 
 export type IngredientImportRowParsed = z.infer<typeof ingredientImportRowSchema>;
+
+// commitIngredientImport (features/ingredients/actions/ingredient-import-export.ts)
+// receives ParsedIngredientRow[] straight back from the browser — the client
+// round-trips preview.toCreate from a prior previewIngredientImport call. That
+// means a crafted/buggy request can hand the server any shape at all, even
+// though TypeScript's ParsedIngredientRow type claims it's already validated.
+// This schema re-checks the *parsed* shape's invariants (not the raw
+// spreadsheet-cell shape ingredientImportRowSchema validates — this one
+// expects already-typed/coerced fields like baseUnit: BaseUnit and
+// costPerUnit: number, not raw unknown cells with Thai-label coercion) so
+// commitIngredientImport can defensively re-validate each row before writing
+// it, the same way previewIngredientImport validated it the first time.
+export const parsedIngredientRowSchema = z
+  .object({
+    rowNumber: z.number().int().positive(),
+    name: z.string().trim().min(1),
+    baseUnit: z.enum(["gram", "ml", "piece"]),
+    costPerUnit: z.number().min(0),
+    startingStock: z.number().min(0),
+    lowStockThreshold: z.number().min(0).nullable(),
+    supplierName: z.string().nullable(),
+    purchaseUnitName: z.string().nullable(),
+    conversionFactor: z.number().positive().nullable(),
+  })
+  .refine((row) => (row.purchaseUnitName === null) === (row.conversionFactor === null), {
+    message: "ต้องกรอกทั้งชื่อหน่วยซื้อและอัตราแปลงคู่กัน หรือไม่กรอกทั้งคู่",
+    path: ["purchaseUnitName"],
+  });

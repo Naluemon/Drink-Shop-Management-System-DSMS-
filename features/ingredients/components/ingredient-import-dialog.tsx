@@ -43,12 +43,16 @@ export function IngredientImportDialog() {
   const [stockInFailures, setStockInFailures] = useState<
     { rowNumber: number; name: string; reason: string }[]
   >([]);
+  const [invalidRows, setInvalidRows] = useState<
+    { rowNumber: number; name: string; reason: string }[]
+  >([]);
   const [isPending, startTransition] = useTransition();
 
   function reset() {
     setPreview(null);
     setError(null);
     setStockInFailures([]);
+    setInvalidRows([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -59,13 +63,22 @@ export function IngredientImportDialog() {
     setPreview(null);
     setStockInFailures([]);
     startTransition(async () => {
-      const fileBase64 = await fileToBase64(file);
-      const result = await previewIngredientImport(fileBase64);
-      if ("error" in result) {
-        setError(result.error);
-        return;
+      try {
+        const fileBase64 = await fileToBase64(file);
+        const result = await previewIngredientImport(fileBase64);
+        if ("error" in result) {
+          setError(result.error);
+          return;
+        }
+        setPreview(result);
+      } catch {
+        // Belt-and-suspenders: previewIngredientImport already catches parse
+        // failures and returns { error }, but a genuinely thrown/rejected
+        // promise (e.g. fileToBase64's FileReader failing, or a network
+        // error) must still surface something instead of leaving the dialog
+        // sitting there doing nothing.
+        setError("เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง");
       }
-      setPreview(result);
     });
   }
 
@@ -73,36 +86,46 @@ export function IngredientImportDialog() {
     if (!preview || preview.toCreate.length === 0) return;
     setError(null);
     startTransition(async () => {
-      const result = await commitIngredientImport(preview.toCreate);
-      if ("error" in result) {
-        setError(result.error);
-        return;
-      }
-      // createdCount only counts rows whose Ingredient row (and starting-stock
-      // ledger movement, if any) both succeeded. A row can create the
-      // Ingredient but still fail to record its starting stock (see the
-      // comment above recordStockIn's call site in ingredient-import-export.ts).
-      // When that happens, fold both counts into a single toast so the
-      // numbers never contradict each other (e.g. a green "0 succeeded" next
-      // to a warning that N ingredients were actually created), and keep the
-      // dialog open with the failure detail below so it doesn't vanish with
-      // the toast — the user needs it to go correct stock manually.
-      if (result.stockInFailures.length > 0) {
-        toast.warning(
-          `สร้างวัตถุดิบ ${result.createdCount} รายการ (${result.stockInFailures.length} รายการไม่สามารถบันทึกสต็อกเริ่มต้นได้ ดูรายละเอียดด้านล่าง)`,
-        );
-        setStockInFailures(result.stockInFailures);
+      try {
+        const result = await commitIngredientImport(preview.toCreate);
+        if ("error" in result) {
+          setError(result.error);
+          return;
+        }
+        // createdCount only counts rows whose Ingredient row (and starting-stock
+        // ledger movement, if any) both succeeded. A row can create the
+        // Ingredient but still fail to record its starting stock (see the
+        // comment above recordStockIn's call site in ingredient-import-export.ts),
+        // or fail server-side re-validation entirely and never reach Prisma
+        // (see invalidRows there). When either happens, fold the counts into
+        // a single toast so the numbers never contradict each other (e.g. a
+        // green "0 succeeded" next to a warning that N ingredients were
+        // actually created), and keep the dialog open with the failure
+        // detail below so it doesn't vanish with the toast.
+        if (result.stockInFailures.length > 0 || result.invalidRows.length > 0) {
+          const failureCount = result.stockInFailures.length + result.invalidRows.length;
+          toast.warning(
+            `สร้างวัตถุดิบ ${result.createdCount} รายการ (${failureCount} รายการไม่สำเร็จ ดูรายละเอียดด้านล่าง)`,
+          );
+          setStockInFailures(result.stockInFailures);
+          setInvalidRows(result.invalidRows);
+          router.refresh();
+          return;
+        }
+        toast.success(`นำเข้าสำเร็จ ${result.createdCount} รายการ`);
+        setOpen(false);
+        reset();
         router.refresh();
-        return;
+      } catch {
+        // Belt-and-suspenders: a genuinely thrown/rejected promise (network
+        // error, etc.) must still surface something instead of leaving the
+        // dialog sitting there doing nothing.
+        setError("เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง");
       }
-      toast.success(`นำเข้าสำเร็จ ${result.createdCount} รายการ`);
-      setOpen(false);
-      reset();
-      router.refresh();
     });
   }
 
-  function handleAcknowledgeStockInFailures() {
+  function handleAcknowledgeFailures() {
     setOpen(false);
     reset();
   }
@@ -150,7 +173,22 @@ export function IngredientImportDialog() {
           </div>
         )}
 
-        {stockInFailures.length === 0 && preview && (
+        {invalidRows.length > 0 && (
+          <div className="space-y-2 text-sm">
+            <p className="text-destructive font-medium">
+              ข้ามไป {invalidRows.length} รายการ (ข้อมูลไม่ผ่านการตรวจสอบก่อนบันทึก)
+            </p>
+            <ul className="text-destructive list-inside list-disc">
+              {invalidRows.map((f) => (
+                <li key={f.rowNumber}>
+                  แถวที่ {f.rowNumber} ({f.name}): {f.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {stockInFailures.length === 0 && invalidRows.length === 0 && preview && (
           <div className="space-y-2 text-sm">
             <p>จะสร้างวัตถุดิบใหม่ {preview.toCreate.length} รายการ</p>
             {preview.duplicates.length > 0 && (
@@ -183,8 +221,8 @@ export function IngredientImportDialog() {
         )}
 
         <DialogFooter>
-          {stockInFailures.length > 0 ? (
-            <Button type="button" onClick={handleAcknowledgeStockInFailures}>
+          {stockInFailures.length > 0 || invalidRows.length > 0 ? (
+            <Button type="button" onClick={handleAcknowledgeFailures}>
               ปิด
             </Button>
           ) : (

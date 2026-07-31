@@ -52,7 +52,11 @@ export async function confirmDelete(options: {
 }): Promise<boolean> {
   const result = await Swal.fire({
     icon: "warning",
-    title: options.title,
+    // titleText (not title) — title is parsed as HTML by SweetAlert2, and
+    // this string embeds a user-controlled name (ingredient/menu/recipe/
+    // supplier), so a name like `<img src=x onerror=...>` would execute as
+    // live JS for whoever next opens this dialog (stored XSS).
+    titleText: options.title,
     text: options.description,
     showCancelButton: true,
     confirmButtonText: options.confirmLabel ?? "ลบ",

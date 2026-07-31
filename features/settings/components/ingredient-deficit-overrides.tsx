@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { updateIngredientDeficitOverride } from "../actions/company-settings";
 import {
   Select,
@@ -57,6 +58,7 @@ export function IngredientDeficitOverrides({ ingredients }: IngredientDeficitOve
             : r,
         ),
       );
+      toast.success("บันทึกสำเร็จ");
     });
   }
 

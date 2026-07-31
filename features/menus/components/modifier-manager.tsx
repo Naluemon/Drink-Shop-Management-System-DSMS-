@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { addModifier, removeModifier } from "../actions/modifier-groups";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ export function ModifierManager({
       }
       if (result?.modifier) {
         updateModifiers([...modifiers, result.modifier]);
+        toast.success("เพิ่มตัวเลือกสำเร็จ");
       }
       setName("");
       setIngredientId(NO_INGREDIENT);
@@ -94,6 +96,7 @@ export function ModifierManager({
         return;
       }
       updateModifiers(modifiers.filter((m) => m.id !== id));
+      toast.success("ลบตัวเลือกสำเร็จ");
     });
   }
 

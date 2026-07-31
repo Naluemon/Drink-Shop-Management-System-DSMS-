@@ -9,7 +9,6 @@ import {
   commitIngredientImport,
   type PreviewResult,
 } from "../actions/ingredient-import-export";
-import type { ParsedIngredientRow } from "../lib/validate-import";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -144,7 +143,16 @@ export function IngredientImportDialog() {
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>นำเข้าวัตถุดิบจากไฟล์</DialogTitle>
-          <DialogDescription>รองรับไฟล์ .xlsx และ .csv ตามผังคอลัมน์ของแม่แบบ</DialogDescription>
+          <DialogDescription>
+            รองรับไฟล์ .xlsx และ .csv — ยังไม่มีไฟล์?{" "}
+            <a href="/templates/ingredients-import-template.xlsx" download className="underline">
+              ดาวน์โหลดแม่แบบ Excel
+            </a>{" "}
+            หรือ{" "}
+            <a href="/templates/ingredients-import-template.csv" download className="underline">
+              CSV
+            </a>
+          </DialogDescription>
         </DialogHeader>
 
         <input

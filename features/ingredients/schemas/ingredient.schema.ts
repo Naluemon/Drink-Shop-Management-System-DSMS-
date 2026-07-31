@@ -8,6 +8,10 @@ export const ingredientSchema = z.object({
   costPerUnit: z.coerce.number().min(0, "ต้นทุนต้องไม่ติดลบ"),
   lowStockThreshold: z.coerce.number().min(0).optional().or(z.literal("")),
   supplierId: z.string().optional().or(z.literal("")),
+  // Only meaningful on create — goes through recordStockIn (never a direct
+  // currentStockQty write), same rule as the file-import flow. Ignored by
+  // updateIngredient, which never touches stock.
+  startingStock: z.coerce.number().min(0, "สต็อกเริ่มต้นต้องไม่ติดลบ").optional().or(z.literal("")),
 });
 
 export type IngredientInput = z.infer<typeof ingredientSchema>;

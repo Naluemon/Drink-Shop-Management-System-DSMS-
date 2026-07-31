@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
   updateRolePagePermissions,
@@ -100,6 +101,7 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
       }
       setBaseline(grid);
       setConfirmMessage("บันทึกสำเร็จ");
+      toast.success("บันทึกสำเร็จ");
       router.refresh();
     });
   }
@@ -117,6 +119,7 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
       setGrid(defaultGrid);
       setBaseline(defaultGrid);
       setConfirmMessage("รีเซ็ตสำเร็จ");
+      toast.success("รีเซ็ตสำเร็จ");
       router.refresh();
     });
   }

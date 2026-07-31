@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { createReasonCode, updateReasonCode, softDeleteReasonCode } from "../actions/reason-codes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export function ReasonCodeManager({ initialCodes }: ReasonCodeManagerProps) {
       }
       setCode("");
       setLabel("");
+      toast.success("เพิ่มเหตุผลสำเร็จ");
     });
   }
 
@@ -55,6 +57,7 @@ export function ReasonCodeManager({ initialCodes }: ReasonCodeManagerProps) {
         return;
       }
       setCodes((prev) => prev.map((c) => (c.id === row.id ? { ...c, isActive: !c.isActive } : c)));
+      toast.success(row.isActive ? "ปิดใช้งานสำเร็จ" : "เปิดใช้งานสำเร็จ");
     });
   }
 
@@ -67,6 +70,7 @@ export function ReasonCodeManager({ initialCodes }: ReasonCodeManagerProps) {
         return;
       }
       setCodes((prev) => prev.filter((c) => c.id !== id));
+      toast.success("ลบสำเร็จ");
     });
   }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { voidTransaction, requestRefund } from "../actions/void-refund";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ export function RecentTransactionsPanel({ initialTransactions }: RecentTransacti
             : t,
         ),
       );
+      toast.success(actionTarget.mode === "void" ? "ยกเลิกรายการสำเร็จ" : "ส่งคำขอคืนเงินสำเร็จ");
       setActionTarget(null);
       setReason("");
     });

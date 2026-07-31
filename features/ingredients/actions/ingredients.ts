@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
+import { recordStockIn } from "@/features/inventory/actions/inventory";
 import {
   ingredientSchema,
   IngredientInput,
@@ -100,6 +101,21 @@ export async function createIngredient(input: IngredientInput) {
       createdBy: actor.id,
     },
   });
+
+  const startingStock =
+    result.data.startingStock === "" || result.data.startingStock === undefined
+      ? 0
+      : result.data.startingStock;
+  if (startingStock > 0) {
+    const stockInResult = await recordStockIn({
+      ingredientId: ingredient.id,
+      quantity: startingStock,
+      note: "สต็อกเริ่มต้นตอนเพิ่มวัตถุดิบ",
+    });
+    if (!("success" in stockInResult)) {
+      return { success: true, ingredient, stockInError: stockInResult.error };
+    }
+  }
 
   return { success: true, ingredient };
 }

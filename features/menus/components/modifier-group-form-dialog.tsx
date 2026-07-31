@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Plus, Pencil } from "lucide-react";
 import { createModifierGroup, updateModifierGroup } from "../actions/modifier-groups";
 import { ModifierManager, type ModifierRow, type IngredientOption } from "./modifier-manager";
@@ -90,6 +91,7 @@ export function ModifierGroupFormDialog({
       }
 
       onSaved?.({ id, name, selectionType, isRequired });
+      toast.success(mode === "create" ? "เพิ่มกลุ่มตัวเลือกสำเร็จ" : "แก้ไขกลุ่มตัวเลือกสำเร็จ");
 
       if (mode === "create") {
         setOpen(false);

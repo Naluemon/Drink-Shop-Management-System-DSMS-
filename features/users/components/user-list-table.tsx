@@ -65,10 +65,13 @@ export function UserListTable({ initialUsers, currentUserId }: UserListTableProp
       const result = await toggleUserActive(userId);
       if (result?.error) {
         setError(result.error);
+        toast.error(result.error);
       } else {
+        const wasActive = users.find((u) => u.id === userId)?.isActive;
         setUsers((prev) =>
           prev.map((u) => (u.id === userId ? { ...u, isActive: !u.isActive } : u)),
         );
+        toast.success(wasActive ? "ระงับผู้ใช้สำเร็จ" : "เปิดใช้งานผู้ใช้สำเร็จ");
       }
       setPendingId(null);
     });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { PackagePlus } from "lucide-react";
 import { recordStockIn, recordStockOut, recordAdjustment } from "../actions/inventory";
 import { Button } from "@/components/ui/button";
@@ -164,6 +165,7 @@ function StockInForm({
         setError(result.error);
         return;
       }
+      toast.success("บันทึกรับเข้าสำเร็จ");
       onDone();
     });
   }
@@ -237,6 +239,7 @@ function StockOutForm({
         setDeficitWarning(true);
         return;
       }
+      toast.success("บันทึกจ่ายออกสำเร็จ");
       onDone();
     });
   }
@@ -326,6 +329,7 @@ function AdjustmentForm({
         setError(result.error);
         return;
       }
+      toast.success("บันทึกปรับปรุงสำเร็จ");
       onDone();
     });
   }

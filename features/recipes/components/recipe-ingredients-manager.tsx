@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { addRecipeIngredient, removeRecipeIngredient } from "../actions/recipes";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,7 @@ export function RecipeIngredientsManager({
       }
       if (result?.recipeIngredient) {
         updateRows([...rows, result.recipeIngredient]);
+        toast.success("เพิ่มวัตถุดิบในสูตรสำเร็จ");
       }
       setIngredientId("");
       setQuantity("");
@@ -86,6 +88,7 @@ export function RecipeIngredientsManager({
         return;
       }
       updateRows(rows.filter((r) => r.id !== id));
+      toast.success("ลบวัตถุดิบในสูตรสำเร็จ");
     });
   }
 

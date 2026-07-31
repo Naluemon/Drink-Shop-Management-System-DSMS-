@@ -114,7 +114,7 @@ function Sidebar({
   return (
     <aside
       className={cn(
-        "border-border/60 bg-card/60 w-72 shrink-0 flex-col border-r backdrop-blur-md",
+        "border-border/60 bg-card/60 sticky top-0 h-screen w-72 shrink-0 flex-col border-r backdrop-blur-md",
         className,
       )}
     >

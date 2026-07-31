@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { adjustExpenseEntry } from "../actions/expense";
 import { formatBaht } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ export function ExpenseAdjustmentDialog({
       setDelta("");
       setNote("");
       setOpen(false);
+      toast.success("บันทึกการปรับปรุงสำเร็จ");
       onAdjusted?.();
     });
   }

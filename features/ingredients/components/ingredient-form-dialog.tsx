@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Plus, Pencil } from "lucide-react";
 import { createIngredient, updateIngredient } from "../actions/ingredients";
 import { CostCalculator } from "./cost-calculator";
@@ -75,6 +76,7 @@ export function IngredientFormDialog({
     initialValues?.lowStockThreshold ?? "",
   );
   const [supplierId, setSupplierId] = useState(initialValues?.supplierId ?? "");
+  const [startingStock, setStartingStock] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -88,8 +90,10 @@ export function IngredientFormDialog({
         costPerUnit: Number(costPerUnit),
         lowStockThreshold: lowStockThreshold === "" ? ("" as const) : Number(lowStockThreshold),
         supplierId,
+        startingStock: startingStock === "" ? ("" as const) : Number(startingStock),
       };
       let id: string;
+      let stockInError: string | undefined;
       if (mode === "create") {
         const result = await createIngredient(input);
         if (result?.error) {
@@ -97,6 +101,7 @@ export function IngredientFormDialog({
           return;
         }
         id = result.ingredient!.id;
+        stockInError = result.stockInError;
       } else {
         const result = await updateIngredient(initialValues!.id!, input);
         if (result?.error) {
@@ -115,6 +120,17 @@ export function IngredientFormDialog({
         supplierId,
       });
 
+      if (stockInError) {
+        // Ingredient itself was created (onSaved already fired so the list
+        // reflects it) — only the stock-in movement failed. Keep the dialog
+        // open so this doesn't get missed, matching the file-import dialog's
+        // treatment of the same failure mode.
+        setError(`เพิ่มวัตถุดิบสำเร็จ แต่บันทึกสต็อกเริ่มต้นไม่สำเร็จ: ${stockInError}`);
+        return;
+      }
+
+      toast.success(mode === "create" ? "เพิ่มวัตถุดิบสำเร็จ" : "แก้ไขวัตถุดิบสำเร็จ");
+
       if (mode === "create") {
         setOpen(false);
         setName("");
@@ -122,6 +138,7 @@ export function IngredientFormDialog({
         setCostPerUnit("0");
         setLowStockThreshold("");
         setSupplierId("");
+        setStartingStock("");
       }
     });
   }
@@ -147,7 +164,7 @@ export function IngredientFormDialog({
             {mode === "create" ? "เพิ่มวัตถุดิบใหม่" : `แก้ไข ${initialValues?.name}`}
           </DialogTitle>
           <DialogDescription>
-            หน่วยฐาน (base unit) กำหนดครั้งเดียว ใช้ในสูตรเสมอ (DECISIONS.md D2)
+            หน่วยฐานเลือกได้ครั้งเดียวตอนสร้าง และจะใช้แบบนี้ตลอดเมื่อนำวัตถุดิบนี้ไปทำสูตร
           </DialogDescription>
         </DialogHeader>
 
@@ -197,6 +214,21 @@ export function IngredientFormDialog({
             </div>
           </div>
 
+          {mode === "create" && (
+            <div className="space-y-2">
+              <Label htmlFor="ing-starting-stock">สต็อกเริ่มต้น (ไม่บังคับ)</Label>
+              <Input
+                id="ing-starting-stock"
+                type="number"
+                step="0.01"
+                min="0"
+                value={startingStock}
+                onChange={(e) => setStartingStock(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+          )}
+
           {suppliers.length > 0 && (
             <div className="space-y-2">
               <Label htmlFor="ing-supplier">ผู้จำหน่าย (ไม่บังคับ)</Label>
@@ -220,7 +252,7 @@ export function IngredientFormDialog({
           <CostCalculator baseUnit={baseUnit} onApply={(v) => setCostPerUnit(v.toFixed(4))} />
 
           <div className="space-y-2">
-            <Label htmlFor="ing-cost">ต้นทุนต่อหน่วย (บาท) — ค่ากรอกมือก่อนมี PO จริง (D1)</Label>
+            <Label htmlFor="ing-cost">ต้นทุนต่อหน่วย (บาท) — กรอกเองได้ก่อนมีใบสั่งซื้อจริง</Label>
             <Input
               id="ing-cost"
               type="number"

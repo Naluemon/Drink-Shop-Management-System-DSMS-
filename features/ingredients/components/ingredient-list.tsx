@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Download } from "lucide-react";
 import { softDeleteIngredient } from "../actions/ingredients";
 import { exportIngredients } from "../actions/ingredient-import-export";
 import {
@@ -11,10 +10,11 @@ import {
   type SavedIngredientFields,
 } from "./ingredient-form-dialog";
 import { IngredientImportDialog } from "./ingredient-import-dialog";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { SearchInput } from "@/components/search-input";
+import { ExportMenuButton } from "@/components/export-menu-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { formatNumber } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { formatNumber, downloadBase64File } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -32,19 +32,6 @@ import {
 } from "@/components/ui/table";
 
 const BASE_UNIT_LABELS: Record<string, string> = { gram: "กรัม", ml: "มล.", piece: "ชิ้น" };
-
-function downloadBase64File(filename: string, base64: string, mimeType: string) {
-  const byteChars = atob(base64);
-  const bytes = new Uint8Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
-  const blob = new Blob([bytes], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export interface IngredientRow {
   id: string;
@@ -162,13 +149,12 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <Input
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-nowrap items-center gap-2">
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="ค้นหาชื่อ ผู้จำหน่าย หรือต้นทุน..."
-            className="max-w-xs"
           />
           {suppliers.length > 0 && (
             <Select value={supplierFilter} onValueChange={(v) => setSupplierFilter(v ?? "")}>
@@ -192,32 +178,7 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
           <div className="flex flex-wrap items-center gap-2">
             <IngredientFormDialog mode="create" suppliers={suppliers} onSaved={handleCreated} />
             <IngredientImportDialog />
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isExporting}
-              onClick={() => handleExport("xlsx")}
-            >
-              <Download /> ส่งออก Excel
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isExporting}
-              onClick={() => handleExport("csv")}
-            >
-              <Download /> ส่งออก CSV
-            </Button>
-            <a href="/templates/ingredients-import-template.xlsx" download>
-              <Button type="button" variant="ghost">
-                แม่แบบ (Excel)
-              </Button>
-            </a>
-            <a href="/templates/ingredients-import-template.csv" download>
-              <Button type="button" variant="ghost">
-                แม่แบบ (CSV)
-              </Button>
-            </a>
+            <ExportMenuButton onExport={handleExport} disabled={isExporting} />
           </div>
         )}
       </div>

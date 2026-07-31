@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { createMenuCategory } from "../actions/menus";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ export function CategoryQuickAdd({ onCreated }: CategoryQuickAddProps) {
           name: result.category.name,
           type: result.category.type,
         });
+        toast.success("เพิ่มหมวดหมู่สำเร็จ");
       }
       setName("");
       setType("drink");

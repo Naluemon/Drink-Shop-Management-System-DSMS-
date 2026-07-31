@@ -3,14 +3,17 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { softDeleteRecipe } from "../actions/recipes";
+import { exportRecipes } from "../actions/recipe-import-export";
 import {
   RecipeFormDialog,
   type RecipeFormValues,
   type SavedRecipeFields,
 } from "./recipe-form-dialog";
+import { RecipeImportDialog } from "./recipe-import-dialog";
 import type { RecipeIngredientRow, IngredientOption } from "./recipe-ingredients-manager";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
+import { ExportMenuButton } from "@/components/export-menu-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Table,
@@ -20,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatBaht } from "@/lib/utils";
+import { formatBaht, downloadBase64File } from "@/lib/utils";
 
 export interface RecipeRow {
   id: string;
@@ -52,9 +55,37 @@ function recomputeCost(
 // FR-RCP-01..04: CRUD recipe, cost คำนวณสดเสมอ ไม่ cache (ARCHITECTURE.md §3)
 export function RecipeList({ initialRecipes, availableIngredients, canEdit }: RecipeListProps) {
   const [recipes, setRecipes] = useState(initialRecipes);
+  // Same fix as IngredientList: the import dialog's router.refresh() re-runs
+  // the server component with a fresh initialRecipes array, but useState
+  // only reads its initializer once. Adjust state during render (React's
+  // documented pattern) rather than useEffect — see ingredient-list.tsx's
+  // identical comment for the full rationale. The manual create/update/
+  // delete flows below never call router.refresh(), so this never clobbers
+  // their optimistic local updates.
+  const [prevInitialRecipes, setPrevInitialRecipes] = useState(initialRecipes);
+  if (initialRecipes !== prevInitialRecipes) {
+    setPrevInitialRecipes(initialRecipes);
+    setRecipes(initialRecipes);
+  }
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isExporting, startExportTransition] = useTransition();
+
+  function handleExport(format: "xlsx" | "csv") {
+    startExportTransition(async () => {
+      const result = await exportRecipes(format);
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      const mimeType =
+        format === "csv"
+          ? "text/csv;charset=utf-8;"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      downloadBase64File(result.filename, result.fileBase64, mimeType);
+    });
+  }
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -114,19 +145,22 @@ export function RecipeList({ initialRecipes, availableIngredients, canEdit }: Re
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SearchInput
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="ค้นหาชื่อสูตร หรือต้นทุน..."
-          className="max-w-xs"
         />
         {canEdit && (
-          <RecipeFormDialog
-            mode="create"
-            availableIngredients={availableIngredients}
-            onSaved={handleCreated}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <RecipeFormDialog
+              mode="create"
+              availableIngredients={availableIngredients}
+              onSaved={handleCreated}
+            />
+            <RecipeImportDialog />
+            <ExportMenuButton onExport={handleExport} disabled={isExporting} />
+          </div>
         )}
       </div>
 
@@ -139,7 +173,7 @@ export function RecipeList({ initialRecipes, availableIngredients, canEdit }: Re
           <TableRow>
             <TableHead className="w-12">ลำดับ</TableHead>
             <TableHead>ชื่อสูตร</TableHead>
-            <TableHead>Yield</TableHead>
+            <TableHead>ผลผลิต</TableHead>
             <TableHead>จำนวนวัตถุดิบ</TableHead>
             <TableHead>ต้นทุนต่อ 1 yield</TableHead>
             {canEdit && <TableHead className="text-right">จัดการ</TableHead>}

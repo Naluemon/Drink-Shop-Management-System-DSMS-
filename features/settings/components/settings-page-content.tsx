@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import {
   updateCompanyInfo,
   updateTaxSettings,
@@ -88,6 +89,7 @@ function CompanyInfoSection({ initial }: { initial: CompanySettingsData }) {
         return;
       }
       setSavedAt(Date.now());
+      toast.success("บันทึกสำเร็จ");
     });
   }
 
@@ -170,6 +172,7 @@ function TaxSection({ initial }: { initial: TaxSettingsData }) {
         return;
       }
       setSavedAt(Date.now());
+      toast.success("บันทึกสำเร็จ");
     });
   }
 
@@ -247,6 +250,7 @@ function ReceiptSection({ initial }: { initial: CompanySettingsData }) {
         return;
       }
       setSavedAt(Date.now());
+      toast.success("บันทึกสำเร็จ");
     });
   }
 
@@ -322,6 +326,7 @@ function BusinessHoursSection({ initial }: { initial: CompanySettingsData }) {
         return;
       }
       setSavedAt(Date.now());
+      toast.success("บันทึกสำเร็จ");
     });
   }
 
@@ -406,6 +411,7 @@ function StockDeficitPolicySection({
         return;
       }
       setSavedAt(Date.now());
+      toast.success("บันทึกสำเร็จ");
     });
   }
 

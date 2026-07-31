@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Plus, Pencil } from "lucide-react";
 import { createRecipe, updateRecipe } from "../actions/recipes";
 import {
@@ -78,6 +79,7 @@ export function RecipeFormDialog({
       }
 
       onSaved?.({ id, name, yield: yieldAmount });
+      toast.success(mode === "create" ? "เพิ่มสูตรสำเร็จ" : "แก้ไขสูตรสำเร็จ");
 
       if (mode === "create") {
         setOpen(false);
@@ -108,7 +110,7 @@ export function RecipeFormDialog({
             {mode === "create" ? "เพิ่มสูตรใหม่" : `แก้ไข ${initialValues?.name}`}
           </DialogTitle>
           <DialogDescription>
-            ต้นทุนคำนวณอัตโนมัติจากวัตถุดิบ × ปริมาณ ÷ yield เสมอ (ARCHITECTURE.md §3)
+            ต้นทุนคำนวณให้อัตโนมัติจาก (วัตถุดิบ × ปริมาณ) หารด้วยผลผลิต
           </DialogDescription>
         </DialogHeader>
 
@@ -127,7 +129,9 @@ export function RecipeFormDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="rcp-yield">Yield (ผลผลิตที่ได้จาก 1 สูตร)</Label>
+            <Label htmlFor="rcp-yield">
+              ผลผลิต (ทำสูตรนี้ 1 ครั้งได้กี่หน่วย เช่น กี่แก้ว/กี่ที่)
+            </Label>
             <Input
               id="rcp-yield"
               type="number"

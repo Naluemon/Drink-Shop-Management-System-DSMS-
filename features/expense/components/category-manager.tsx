@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import {
   createExpenseCategory,
@@ -43,6 +44,7 @@ export function CategoryManager({ initialCategories, onChanged }: CategoryManage
       if (result?.category) {
         setCategories((prev) => [...prev, { id: result.category.id, name: result.category.name }]);
         onChanged?.();
+        toast.success("เพิ่มหมวดหมู่สำเร็จ");
       }
       setName("");
     });
@@ -60,6 +62,7 @@ export function CategoryManager({ initialCategories, onChanged }: CategoryManage
       setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, name: editingName } : c)));
       setEditingId(null);
       onChanged?.();
+      toast.success("แก้ไขหมวดหมู่สำเร็จ");
     });
   }
 
@@ -73,6 +76,7 @@ export function CategoryManager({ initialCategories, onChanged }: CategoryManage
       }
       setCategories((prev) => prev.filter((c) => c.id !== id));
       onChanged?.();
+      toast.success("ลบหมวดหมู่สำเร็จ");
     });
   }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { createPurchaseOrder } from "../actions/purchase-orders";
 import {
@@ -132,7 +133,14 @@ export function PurchaseOrderFormDialog({
               availableIngredients={availableIngredients}
               onItemsChange={handleItemsChange}
             />
-            <Button type="button" className="w-full" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => {
+                toast.success("บันทึกใบสั่งซื้อสำเร็จ");
+                setOpen(false);
+              }}
+            >
               เสร็จสิ้น
             </Button>
           </div>

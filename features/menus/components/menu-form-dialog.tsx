@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Plus, Pencil } from "lucide-react";
 import { createMenu, updateMenu } from "../actions/menus";
 import { VariantManager, type VariantRow, type RecipeOption } from "./variant-manager";
@@ -136,6 +137,7 @@ export function MenuFormDialog({
         imageUrl,
         isAvailable,
       });
+      toast.success(mode === "create" ? "เพิ่มเมนูสำเร็จ" : "แก้ไขเมนูสำเร็จ");
 
       if (mode === "create") {
         setOpen(false);
@@ -169,7 +171,7 @@ export function MenuFormDialog({
           <DialogTitle>
             {mode === "create" ? "เพิ่มเมนูใหม่" : `แก้ไข ${initialValues?.name}`}
           </DialogTitle>
-          <DialogDescription>ผูกกับสูตร 1 ตัวเสมอ (FR-MENU-02)</DialogDescription>
+          <DialogDescription>เมนูนี้ต้องเลือกสูตรหลัก 1 สูตรเสมอ</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">

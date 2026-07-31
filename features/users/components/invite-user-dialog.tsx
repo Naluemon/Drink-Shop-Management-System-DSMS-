@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { UserPlus } from "lucide-react";
 import { createInvite } from "@/features/auth/actions/invite";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ export function InviteUserDialog({ actorRole, onInvited }: InviteUserDialogProps
         return;
       }
       setInviteLink(result?.inviteLink ?? null);
+      toast.success("ส่งคำเชิญสำเร็จ");
       onInvited?.();
     });
   }

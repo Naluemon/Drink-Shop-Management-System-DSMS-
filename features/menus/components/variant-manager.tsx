@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { addMenuVariant, removeMenuVariant } from "../actions/menus";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,7 @@ export function VariantManager({
           ? [...variants.map((v) => ({ ...v, isDefault: false })), result.variant]
           : [...variants, result.variant];
         updateVariants(next);
+        toast.success("เพิ่มตัวเลือกขนาดสำเร็จ");
       }
       setName("");
       setMultiplier("1");
@@ -98,6 +100,7 @@ export function VariantManager({
         return;
       }
       updateVariants(variants.filter((v) => v.id !== id));
+      toast.success("ลบตัวเลือกขนาดสำเร็จ");
     });
   }
 

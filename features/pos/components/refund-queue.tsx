@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { approveRefund, rejectRefund } from "../actions/void-refund";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function RefundQueue({ initialRequests, threshold, canApproveAny }: Refun
         return;
       }
       setRequests((prev) => prev.filter((r) => r.id !== id));
+      toast.success("อนุมัติคืนเงินสำเร็จ");
     });
   }
 
@@ -51,6 +53,7 @@ export function RefundQueue({ initialRequests, threshold, canApproveAny }: Refun
         return;
       }
       setRequests((prev) => prev.filter((r) => r.id !== id));
+      toast.success("ปฏิเสธคำขอคืนเงินสำเร็จ");
     });
   }
 

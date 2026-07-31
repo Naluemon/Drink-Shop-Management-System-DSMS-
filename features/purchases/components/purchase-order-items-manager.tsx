@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { addPurchaseOrderItem, removePurchaseOrderItem } from "../actions/purchase-orders";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,7 @@ export function PurchaseOrderItemsManager({
       }
       if (result?.item) {
         updateItems([...items, result.item]);
+        toast.success("เพิ่มรายการสำเร็จ");
       }
       setIngredientId("");
       setPurchaseUnitName("");
@@ -92,6 +94,7 @@ export function PurchaseOrderItemsManager({
         return;
       }
       updateItems(items.filter((i) => i.id !== id));
+      toast.success("ลบรายการสำเร็จ");
     });
   }
 

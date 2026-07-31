@@ -3,13 +3,16 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { softDeleteMenu } from "../actions/menus";
+import { exportMenus } from "../actions/menu-import-export";
 import { MenuFormDialog, type MenuFormValues, type SavedMenuFields } from "./menu-form-dialog";
+import { MenuImportDialog } from "./menu-import-dialog";
 import type { VariantRow, RecipeOption } from "./variant-manager";
 import type { ModifierGroupOption } from "./modifier-groups-attacher";
 import type { ModifierRow } from "./modifier-manager";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ExportMenuButton } from "@/components/export-menu-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Select,
@@ -26,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatBaht } from "@/lib/utils";
+import { formatBaht, downloadBase64File } from "@/lib/utils";
 
 const ALL_CATEGORIES = "__all__";
 
@@ -61,10 +64,36 @@ export function MenuList({
   canEdit,
 }: MenuListProps) {
   const [menus, setMenus] = useState(initialMenus);
+  // Same fix as IngredientList/RecipeList: the import dialog's
+  // router.refresh() re-runs the server component with a fresh initialMenus
+  // array, but useState only reads its initializer once. Adjust state
+  // during render (React's documented pattern) rather than useEffect — see
+  // ingredient-list.tsx's identical comment for the full rationale.
+  const [prevInitialMenus, setPrevInitialMenus] = useState(initialMenus);
+  if (initialMenus !== prevInitialMenus) {
+    setPrevInitialMenus(initialMenus);
+    setMenus(initialMenus);
+  }
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isExporting, startExportTransition] = useTransition();
+
+  function handleExport(format: "xlsx" | "csv") {
+    startExportTransition(async () => {
+      const result = await exportMenus(format);
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      const mimeType =
+        format === "csv"
+          ? "text/csv;charset=utf-8;"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      downloadBase64File(result.filename, result.fileBase64, mimeType);
+    });
+  }
 
   // Matches name, category, or price — a bare number like "45" finds every
   // menu priced ฿45.xx just as readily as typing the menu name would.
@@ -116,13 +145,12 @@ export function MenuList({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <Input
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-nowrap items-center gap-2">
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="ค้นหาชื่อเมนู หมวดหมู่ หรือราคา..."
-            className="max-w-xs"
           />
           {availableCategories.length > 0 && (
             <Select
@@ -150,13 +178,17 @@ export function MenuList({
           )}
         </div>
         {canEdit && (
-          <MenuFormDialog
-            mode="create"
-            availableRecipes={availableRecipes}
-            availableCategories={availableCategories}
-            availableModifierGroups={availableModifierGroups}
-            onSaved={handleCreated}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <MenuFormDialog
+              mode="create"
+              availableRecipes={availableRecipes}
+              availableCategories={availableCategories}
+              availableModifierGroups={availableModifierGroups}
+              onSaved={handleCreated}
+            />
+            <MenuImportDialog />
+            <ExportMenuButton onExport={handleExport} disabled={isExporting} />
+          </div>
         )}
       </div>
 

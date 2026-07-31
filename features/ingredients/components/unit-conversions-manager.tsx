@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { addUnitConversion, deleteUnitConversion } from "../actions/ingredients";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ export function UnitConversionsManager({
             conversionFactor: result.conversion.conversionFactor.toString(),
           },
         ]);
+        toast.success("เพิ่มหน่วยซื้อสำเร็จ");
       }
       setName("");
       setFactor("");
@@ -68,6 +70,7 @@ export function UnitConversionsManager({
         return;
       }
       setConversions((prev) => prev.filter((c) => c.id !== id));
+      toast.success("ลบหน่วยซื้อสำเร็จ");
     });
   }
 

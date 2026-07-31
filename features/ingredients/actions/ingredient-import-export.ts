@@ -76,9 +76,18 @@ export async function previewIngredientImport(
   return validateImportRows(rawRows, existingNames);
 }
 
-export async function commitIngredientImport(
-  rows: ParsedIngredientRow[],
-): Promise<{ error: string } | { success: true; createdCount: number }> {
+export async function commitIngredientImport(rows: ParsedIngredientRow[]): Promise<
+  | { error: string }
+  | {
+      success: true;
+      createdCount: number;
+      // Rows where the Ingredient (and, if applicable, UnitConversion) were
+      // created but the starting-stock recordStockIn call itself returned
+      // an error instead of throwing — see the loop below. Not counted in
+      // createdCount.
+      stockInFailures: { rowNumber: number; name: string; reason: string }[];
+    }
+> {
   const actor = await getActor();
   if (!actor) return { error: "กรุณาล็อกอินก่อน" };
   try {
@@ -94,6 +103,7 @@ export async function commitIngredientImport(
   const branch = await getOrCreateDefaultBranch();
   const supplierCache = new Map<string, string>();
   let createdCount = 0;
+  const stockInFailures: { rowNumber: number; name: string; reason: string }[] = [];
 
   for (const row of rows) {
     // Defense in depth: re-check nothing created this name since preview
@@ -154,17 +164,40 @@ export async function commitIngredientImport(
     }
 
     if (row.startingStock > 0) {
-      await recordStockIn({
+      const stockInResult = await recordStockIn({
         ingredientId: ingredient.id,
         quantity: row.startingStock,
         note: "นำเข้าข้อมูลเริ่มต้นจากไฟล์",
       });
+      // recordStockIn returns { error } rather than throwing (missing actor,
+      // its own separate stock_in permission check, or schema validation).
+      // The Ingredient row above is already committed and can't be cleanly
+      // rolled back without wrapping this whole loop in a transaction (out
+      // of scope here), but we must not let createdCount claim this row
+      // fully succeeded when the "starting stock > 0 creates a real
+      // stock_in ledger movement" constraint didn't actually hold — track
+      // it distinctly instead of silently reporting success.
+      //
+      // Narrowing note: recordStockIn (features/inventory/actions/inventory.ts)
+      // has no explicit return type annotation, so TS's inferred return type
+      // does not narrow cleanly on `"error" in stockInResult` (a known gap —
+      // see the identical comment in features/settings/actions/company-settings.ts
+      // above requireSettingsAccess). Checking for the absence of `success`
+      // narrows correctly without needing to touch that other file.
+      if (!("success" in stockInResult)) {
+        stockInFailures.push({
+          rowNumber: row.rowNumber,
+          name: row.name,
+          reason: stockInResult.error,
+        });
+        continue;
+      }
     }
 
     createdCount += 1;
   }
 
-  return { success: true, createdCount };
+  return { success: true, createdCount, stockInFailures };
 }
 
 const BASE_UNIT_EXPORT_LABELS: Record<string, string> = { gram: "กรัม", ml: "มล.", piece: "ชิ้น" };
@@ -204,6 +237,17 @@ export async function exportIngredients(
     startingStock: i.currentStockQty.toString(),
     lowStockThreshold: i.lowStockThreshold?.toString() ?? "",
     supplierName: i.supplier?.name ?? "",
+    // Deliberate limitation, not an oversight: INGREDIENT_IMPORT_COLUMNS (Task 2)
+    // has exactly one purchaseUnitName/conversionFactor column pair, matching the
+    // plan's "one purchase-unit conversion per row, maximum" constraint, since
+    // export must round-trip through the same column schema as import. An
+    // ingredient with 2+ UnitConversion rows (supported elsewhere via
+    // unit-conversions-manager.tsx) only exports its first conversion here;
+    // additional conversions are not represented in this file. Do not "fix"
+    // this by adding more columns — that would exceed this task's scope and
+    // the plan's constraint. If a full conversion list is ever needed, it
+    // belongs in a different export/view, not this single-row-per-conversion
+    // column pair.
     purchaseUnitName: i.unitConversions[0]?.purchaseUnitName ?? "",
     conversionFactor: i.unitConversions[0]?.conversionFactor.toString() ?? "",
   }));

@@ -20,7 +20,15 @@ vi.mock("@/lib/default-branch", () => ({
 // a TDZ error ("Cannot access before initialization") when the mocked module
 // is first imported.
 const { recordStockIn } = vi.hoisted(() => ({
-  recordStockIn: vi.fn(async () => ({ success: true, movementId: "mv-1" })),
+  // Explicit return type so mockResolvedValueOnce can be given the `{ error }`
+  // shape in the "recordStockIn fails" test below — without it, TS infers the
+  // mock's return type from this single success-shaped literal only.
+  recordStockIn: vi.fn(
+    async (): Promise<{ error: string } | { success: true; movementId: string }> => ({
+      success: true,
+      movementId: "mv-1",
+    }),
+  ),
 }));
 vi.mock("@/features/inventory/actions/inventory", () => ({ recordStockIn }));
 
@@ -210,6 +218,33 @@ describe("commitIngredientImport", () => {
     if ("error" in result) throw new Error("expected success");
     expect(result.createdCount).toBe(0);
     expect(prismaMock.ingredient.create).not.toHaveBeenCalled();
+  });
+
+  it("does not count a row as created when recordStockIn returns an error", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.ingredient.findFirst.mockResolvedValue(null as never);
+    prismaMock.ingredient.create.mockResolvedValue({ id: "ing-err" } as never);
+    recordStockIn.mockResolvedValueOnce({ error: "คุณไม่มีสิทธิ์รับสินค้าเข้าสต็อก" });
+
+    const result = await commitIngredientImport([
+      {
+        rowNumber: 2,
+        name: "สต็อกเข้าไม่สำเร็จ",
+        baseUnit: "gram",
+        costPerUnit: 1,
+        startingStock: 50,
+        lowStockThreshold: null,
+        supplierName: null,
+        purchaseUnitName: null,
+        conversionFactor: null,
+      },
+    ]);
+
+    if ("error" in result) throw new Error("expected success with stockInFailures, got error");
+    expect(result.createdCount).toBe(0);
+    expect(result.stockInFailures).toEqual([
+      { rowNumber: 2, name: "สต็อกเข้าไม่สำเร็จ", reason: "คุณไม่มีสิทธิ์รับสินค้าเข้าสต็อก" },
+    ]);
   });
 
   it("does not call recordStockIn when starting stock is 0", async () => {

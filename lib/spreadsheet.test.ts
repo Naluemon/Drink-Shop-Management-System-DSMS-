@@ -64,10 +64,11 @@ describe("buildSpreadsheet + parseSpreadsheet round-trip", () => {
 
   it("parses a plain csv buffer with non-ASCII (Thai) headers and values", () => {
     // Regression test: a plain external CSV (not produced by buildSpreadsheet)
-    // with UTF-8 multi-byte header/value text, and no BOM. Before the
-    // `codepage: 65001` fix in parseSpreadsheet, XLSX.read misinterpreted
-    // these bytes as a single-byte codepage, producing mojibake keys that
-    // didn't match the expected Thai header strings.
+    // with UTF-8 multi-byte header/value text, and no BOM. Before
+    // parseSpreadsheet started prepending a UTF-8 BOM to plain-text buffers
+    // that don't already have one, XLSX.read had no signal to detect the
+    // encoding from and fell back to a single-byte codepage, producing
+    // mojibake keys that didn't match the expected Thai header strings.
     const buffer = Buffer.from("ชื่อวัตถุดิบ,หน่วยฐาน\nทดสอบ,กรัม\n", "utf8");
     const parsed = parseSpreadsheet(buffer);
     expect(parsed).toHaveLength(1);

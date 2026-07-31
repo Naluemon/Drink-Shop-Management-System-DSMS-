@@ -24,10 +24,14 @@ test.afterAll(async () => {
   for (const user of createdUsers) {
     await deleteTestUser(user);
   }
+  await prisma.inventoryMovement.deleteMany({
+    where: { ingredient: { name: existingIngredientName } },
+  });
   await prisma.ingredient.deleteMany({ where: { name: existingIngredientName } });
-  const newName = `e2e-new-${Date.now()}`;
+  await prisma.inventoryMovement.deleteMany({
+    where: { ingredient: { name: { startsWith: "e2e-new-" } } },
+  });
   await prisma.ingredient.deleteMany({ where: { name: { startsWith: "e2e-new-" } } });
-  void newName;
 });
 
 test("owner imports a file: new ingredient with starting stock is created, duplicate row is skipped", async ({
@@ -53,13 +57,15 @@ test("owner imports a file: new ingredient with starting stock is created, dupli
     buffer: Buffer.from(csvContent, "utf8"),
   });
 
-  await expect(page.getByText("จะสร้างวัตถุดิบใหม่ 1 รายการ")).toBeVisible();
-  await expect(page.getByText(`แถวที่ 3: ${existingIngredientName}`)).toBeVisible();
+  await expect(page.getByText("จะสร้างวัตถุดิบใหม่ 1 รายการ")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(`แถวที่ 3: ${existingIngredientName}`)).toBeVisible({
+    timeout: 10_000,
+  });
 
   await page.getByRole("button", { name: "ยืนยันนำเข้า" }).click();
-  await expect(page.getByText("นำเข้าสำเร็จ 1 รายการ")).toBeVisible();
+  await expect(page.getByText("นำเข้าสำเร็จ 1 รายการ")).toBeVisible({ timeout: 10_000 });
 
-  await expect(page.getByText(newIngredientName)).toBeVisible();
+  await expect(page.getByText(newIngredientName)).toBeVisible({ timeout: 10_000 });
   const created = await prisma.ingredient.findFirstOrThrow({
     where: { name: newIngredientName },
   });

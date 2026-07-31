@@ -73,6 +73,23 @@ interface IngredientListProps {
 // ไม่มีคอลัมน์นี้ — ดูหมายเหตุใน features/ingredients/actions/ingredients.ts)
 export function IngredientList({ initialIngredients, suppliers, canEdit }: IngredientListProps) {
   const [ingredients, setIngredients] = useState(initialIngredients);
+  // The import dialog (features/ingredients/components/ingredient-import-dialog.tsx)
+  // calls router.refresh() after a successful commit, which re-runs the
+  // server component and passes a freshly-fetched initialIngredients array —
+  // but useState only reads its initializer once, so without this the local
+  // list would never pick up rows created via import. Adjust state during
+  // render (React's documented pattern for this — see
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // rather than in a useEffect, which the repo's lint rules flag as causing
+  // an extra cascading render. The manual create/update/delete flows below
+  // never call router.refresh() (they rely solely on the onSaved/
+  // setIngredients callbacks), so this only kicks in on an actual server
+  // refetch and never clobbers their optimistic local updates.
+  const [prevInitialIngredients, setPrevInitialIngredients] = useState(initialIngredients);
+  if (initialIngredients !== prevInitialIngredients) {
+    setPrevInitialIngredients(initialIngredients);
+    setIngredients(initialIngredients);
+  }
   const [search, setSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
   const [error, setError] = useState<string | null>(null);

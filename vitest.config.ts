@@ -8,6 +8,16 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    exclude: ["node_modules", ".next", "e2e", "lib/generated"],
+    // Globs (not plain strings) so these match at any depth — plain
+    // "node_modules" doesn't stop vitest walking into other git worktrees'
+    // own node_modules nested under .claude/worktrees/<name>/, which used to
+    // sweep in thousands of vendored packages' own test suites.
+    exclude: [
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/e2e/**",
+      "**/lib/generated/**",
+      ".claude/**",
+    ],
   },
 });

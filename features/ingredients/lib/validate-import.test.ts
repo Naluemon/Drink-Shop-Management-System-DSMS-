@@ -70,6 +70,11 @@ describe("validateImportRows", () => {
     expect(result.errors).toHaveLength(1);
   });
 
+  it("rejects a non-numeric cost value with the localized Thai message, not Zod's default", () => {
+    const result = validateImportRows([row({ [C.costPerUnit]: "abc" })], new Set());
+    expect(result.errors).toEqual([{ rowNumber: 2, reason: "ต้นทุนต่อหน่วยต้องเป็นตัวเลข" }]);
+  });
+
   it("rejects a unit-conversion pair with only one side filled", () => {
     const result = validateImportRows([row({ [C.purchaseUnitName]: "กระสอบ" })], new Set());
     expect(result.errors).toEqual([
@@ -81,6 +86,15 @@ describe("validateImportRows", () => {
     const result = validateImportRows([row({})], new Set(["น้ำตาลทราย"]));
     expect(result.toCreate).toHaveLength(0);
     expect(result.duplicates).toEqual([{ rowNumber: 2, name: "น้ำตาลทราย" }]);
+  });
+
+  it("treats existing names as duplicates case-insensitively even if the caller forgot to lower-case them", () => {
+    const result = validateImportRows(
+      [row({ [C.name]: "MILK" })],
+      new Set(["Milk"]), // deliberately not lower-cased, to prove defensive normalization
+    );
+    expect(result.toCreate).toHaveLength(0);
+    expect(result.duplicates).toEqual([{ rowNumber: 2, name: "MILK" }]);
   });
 
   it("skips the second occurrence of a name duplicated within the same file", () => {

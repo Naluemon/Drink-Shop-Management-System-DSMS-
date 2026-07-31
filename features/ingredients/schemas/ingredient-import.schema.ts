@@ -53,12 +53,23 @@ export const ingredientImportRowSchema = z
       .refine((v): v is BaseUnit => v !== undefined, {
         message: "หน่วยฐานต้องเป็น กรัม / มล. / ชิ้น เท่านั้น",
       }),
-    costPerUnit: z.coerce.number().min(0, "ต้นทุนต้องไม่ติดลบ"),
-    startingStock: z.coerce.number().min(0, "สต็อกเริ่มต้นต้องไม่ติดลบ").optional(),
-    lowStockThreshold: z.coerce.number().min(0, "จุดแจ้งเตือนต้องไม่ติดลบ").optional(),
+    costPerUnit: z.coerce
+      .number({ error: "ต้นทุนต่อหน่วยต้องเป็นตัวเลข" })
+      .min(0, "ต้นทุนต้องไม่ติดลบ"),
+    startingStock: z.coerce
+      .number({ error: "สต็อกเริ่มต้นต้องเป็นตัวเลข" })
+      .min(0, "สต็อกเริ่มต้นต้องไม่ติดลบ")
+      .optional(),
+    lowStockThreshold: z.coerce
+      .number({ error: "จุดแจ้งเตือนต้องเป็นตัวเลข" })
+      .min(0, "จุดแจ้งเตือนต้องไม่ติดลบ")
+      .optional(),
     supplierName: z.unknown().transform(emptyToUndefined),
     purchaseUnitName: z.unknown().transform(emptyToUndefined),
-    conversionFactor: z.coerce.number().positive("อัตราแปลงหน่วยต้องมากกว่า 0").optional(),
+    conversionFactor: z.coerce
+      .number({ error: "อัตราแปลงหน่วยต้องเป็นตัวเลข" })
+      .positive("อัตราแปลงหน่วยต้องมากกว่า 0")
+      .optional(),
   })
   .refine((row) => (row.purchaseUnitName === undefined) === (row.conversionFactor === undefined), {
     message: "ต้องกรอกทั้งชื่อหน่วยซื้อและอัตราแปลงคู่กัน หรือไม่กรอกทั้งคู่",

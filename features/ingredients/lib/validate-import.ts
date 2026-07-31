@@ -23,11 +23,14 @@ export interface ValidateImportResult {
 }
 
 // Pure — no Prisma, no I/O — so it's testable without mocking the database.
-// existingNames must already be lower-cased.
+// existingNames does not need to be pre-lower-cased by the caller — it is
+// normalized defensively below — but callers may still pass it lower-cased
+// if convenient.
 export function validateImportRows(
   rawRows: Record<string, unknown>[],
   existingNames: Set<string>,
 ): ValidateImportResult {
+  const normalizedExisting = new Set([...existingNames].map((n) => n.toLowerCase()));
   const toCreate: ParsedIngredientRow[] = [];
   const duplicates: { rowNumber: number; name: string }[] = [];
   const errors: { rowNumber: number; reason: string }[] = [];
@@ -53,7 +56,7 @@ export function validateImportRows(
     }
 
     const lowerName = result.data.name.toLowerCase();
-    if (existingNames.has(lowerName) || seenInFile.has(lowerName)) {
+    if (normalizedExisting.has(lowerName) || seenInFile.has(lowerName)) {
       duplicates.push({ rowNumber, name: result.data.name });
       return;
     }

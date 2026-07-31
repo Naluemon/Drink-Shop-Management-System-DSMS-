@@ -2,12 +2,15 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { Download } from "lucide-react";
 import { softDeleteIngredient } from "../actions/ingredients";
+import { exportIngredients } from "../actions/ingredient-import-export";
 import {
   IngredientFormDialog,
   type IngredientFormValues,
   type SavedIngredientFields,
 } from "./ingredient-form-dialog";
+import { IngredientImportDialog } from "./ingredient-import-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -29,6 +32,19 @@ import {
 } from "@/components/ui/table";
 
 const BASE_UNIT_LABELS: Record<string, string> = { gram: "กรัม", ml: "มล.", piece: "ชิ้น" };
+
+function downloadBase64File(filename: string, base64: string, mimeType: string) {
+  const byteChars = atob(base64);
+  const bytes = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export interface IngredientRow {
   id: string;
@@ -61,6 +77,22 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
   const [supplierFilter, setSupplierFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isExporting, startExportTransition] = useTransition();
+
+  function handleExport(format: "xlsx" | "csv") {
+    startExportTransition(async () => {
+      const result = await exportIngredients(format);
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      const mimeType =
+        format === "csv"
+          ? "text/csv;charset=utf-8;"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      downloadBase64File(result.filename, result.fileBase64, mimeType);
+    });
+  }
 
   const filtered = useMemo(() => {
     return ingredients.filter((i) => {
@@ -140,7 +172,36 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
           )}
         </div>
         {canEdit && (
-          <IngredientFormDialog mode="create" suppliers={suppliers} onSaved={handleCreated} />
+          <div className="flex flex-wrap items-center gap-2">
+            <IngredientFormDialog mode="create" suppliers={suppliers} onSaved={handleCreated} />
+            <IngredientImportDialog />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isExporting}
+              onClick={() => handleExport("xlsx")}
+            >
+              <Download /> ส่งออก Excel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isExporting}
+              onClick={() => handleExport("csv")}
+            >
+              <Download /> ส่งออก CSV
+            </Button>
+            <a href="/templates/ingredients-import-template.xlsx" download>
+              <Button type="button" variant="ghost">
+                แม่แบบ (Excel)
+              </Button>
+            </a>
+            <a href="/templates/ingredients-import-template.csv" download>
+              <Button type="button" variant="ghost">
+                แม่แบบ (CSV)
+              </Button>
+            </a>
+          </div>
         )}
       </div>
 

@@ -195,6 +195,7 @@ model UserInvite {
 // docs/superpowers/specs/2026-07-30-role-page-permissions-design.md).
 // `owner` intentionally never gets a row here — lib/page-access.ts's
 // canAccessPage() hardcodes owner to always pass, independent of this table.
+// TODO(multi-tenant): Phase B needs `organizationId` + an RLS policy here — this table predates that migration and is currently global/single-tenant.
 model RolePagePermission {
   id        String   @id @default(uuid())
   role      UserRole
@@ -209,6 +210,7 @@ model RolePagePermission {
 
 /// Append-only audit trail for RolePagePermission edits made through the
 /// Settings screen. Never updated or deleted, only inserted.
+// TODO(multi-tenant): Phase B needs `organizationId` + an RLS policy here — this table predates that migration and is currently global/single-tenant.
 model PermissionChangeLog {
   id        String   @id @default(uuid())
   role      UserRole

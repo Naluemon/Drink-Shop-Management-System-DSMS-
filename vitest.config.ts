@@ -8,6 +8,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    exclude: ["node_modules", ".next", "e2e", "lib/generated"],
+    // Globs, not bare strings: bare strings match nothing here, so this list
+    // was silently inert and the runner walked into sibling git worktrees
+    // under .claude/worktrees/ and ran their vendored packages' tests.
+    exclude: ["**/node_modules/**", "**/.next/**", "**/.claude/**", "e2e/**", "lib/generated/**"],
   },
 });

@@ -21,6 +21,9 @@ export default defineConfig({
   webServer: {
     command: "npm run dev -- -p 3000",
     url: "http://localhost:3000/login",
-    reuseExistingServer: true,
+    // Playwright's documented default. Reusing unconditionally has already
+    // hidden a fatal build error behind a stale server on port 3000 from
+    // another checkout and reported a whole e2e session as PASS.
+    reuseExistingServer: !process.env.CI,
   },
 });

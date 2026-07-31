@@ -62,7 +62,7 @@ export async function createExpenseCategory(input: ExpenseCategoryInput) {
   const result = expenseCategorySchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const existingCategory = await prisma.expenseCategory.findFirst({
     where: {
@@ -171,7 +171,7 @@ export async function createExpenseEntry(input: ExpenseEntryInput & { slipFile?:
   const result = expenseEntrySchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   let slipUrl: string | null = null;
   if (input.slipFile && input.slipFile.size > 0) {

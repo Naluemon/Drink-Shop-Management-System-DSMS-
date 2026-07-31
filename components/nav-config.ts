@@ -16,27 +16,16 @@ import {
   HelpCircle,
   type LucideIcon,
 } from "lucide-react";
-import { hasPermission, type Action, type Resource } from "@/lib/permissions";
+import { canAccessPage, type PageKey, type RolePagePermissionMap } from "@/lib/page-access";
 import type { UserRole } from "@/lib/generated/prisma/enums";
-
-const ALL_ROLES: UserRole[] = [
-  "owner",
-  "manager",
-  "shift_supervisor",
-  "cashier",
-  "employee",
-  "accountant",
-];
-
-function rolesWithAnyAccess(resource: Resource, actions: Action[] = ["view"]) {
-  return new Set(ALL_ROLES.filter((role) => actions.some((a) => hasPermission(role, a, resource))));
-}
 
 export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  roles: Set<UserRole>;
+  // Omitted => always enabled for every role (dashboard, guide) — see
+  // lib/page-access.ts's PAGE_KEYS comment for why those two are excluded.
+  pageKey?: PageKey;
 }
 
 export interface NavGroup {
@@ -44,128 +33,84 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-// Nav visibility is derived straight from lib/permissions.ts (SECURITY.md §1)
-// instead of a hand-maintained boolean per link — every future phase's page
-// only needs one line here, and it can never drift from the matrix.
+// Nav item list — static shape only. Per-role enabled/disabled state is
+// computed at render time by getNavItemsWithState() below, from the
+// owner-configurable RolePagePermission table (lib/page-access.ts), not
+// hardcoded here anymore.
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "ภาพรวม",
-    items: [
-      {
-        href: "/dashboard",
-        label: "แดชบอร์ด",
-        icon: LayoutDashboard,
-        roles: rolesWithAnyAccess("dashboard", ["view"]),
-      },
-    ],
+    items: [{ href: "/dashboard", label: "แดชบอร์ด", icon: LayoutDashboard }],
   },
   {
     label: "ขายหน้าร้าน",
     items: [
-      {
-        href: "/pos",
-        label: "หน้าขาย (POS)",
-        icon: ShoppingCart,
-        roles: rolesWithAnyAccess("pos_sale", ["create"]),
-      },
-      {
-        href: "/refunds",
-        label: "อนุมัติคืนเงิน",
-        icon: Undo2,
-        roles: rolesWithAnyAccess("pos_refund", ["approve"]),
-      },
+      { href: "/pos", label: "หน้าขาย (POS)", icon: ShoppingCart, pageKey: "pos" },
+      { href: "/refunds", label: "อนุมัติคืนเงิน", icon: Undo2, pageKey: "refunds" },
     ],
   },
   {
     label: "จัดการร้าน",
     items: [
-      {
-        href: "/ingredients",
-        label: "วัตถุดิบ",
-        icon: Package,
-        roles: rolesWithAnyAccess("ingredient"),
-      },
-      { href: "/recipes", label: "สูตร", icon: BookOpen, roles: rolesWithAnyAccess("recipe") },
-      { href: "/menus", label: "เมนู", icon: Coffee, roles: rolesWithAnyAccess("menu") },
+      { href: "/ingredients", label: "วัตถุดิบ", icon: Package, pageKey: "ingredients" },
+      { href: "/recipes", label: "สูตร", icon: BookOpen, pageKey: "recipes" },
+      { href: "/menus", label: "เมนู", icon: Coffee, pageKey: "menus" },
       {
         href: "/modifier-groups",
         label: "กลุ่มตัวเลือก",
         icon: SlidersHorizontal,
-        roles: rolesWithAnyAccess("menu"),
+        pageKey: "modifier-groups",
       },
     ],
   },
   {
     label: "คลังและจัดซื้อ",
     items: [
-      {
-        href: "/inventory",
-        label: "สต็อก",
-        icon: Boxes,
-        roles: rolesWithAnyAccess("stock_in", ["view", "create"]),
-      },
-      {
-        href: "/suppliers",
-        label: "ผู้จำหน่าย",
-        icon: Truck,
-        roles: rolesWithAnyAccess("purchase"),
-      },
-      {
-        href: "/purchases",
-        label: "ใบสั่งซื้อ",
-        icon: ClipboardList,
-        roles: rolesWithAnyAccess("purchase"),
-      },
+      { href: "/inventory", label: "สต็อก", icon: Boxes, pageKey: "inventory" },
+      { href: "/suppliers", label: "ผู้จำหน่าย", icon: Truck, pageKey: "suppliers" },
+      { href: "/purchases", label: "ใบสั่งซื้อ", icon: ClipboardList, pageKey: "purchases" },
     ],
   },
   {
     label: "การเงิน",
     items: [
-      {
-        href: "/expenses",
-        label: "ค่าใช้จ่าย",
-        icon: Receipt,
-        roles: rolesWithAnyAccess("expense", ["view"]),
-      },
-      {
-        href: "/reports",
-        label: "รายงาน",
-        icon: BarChart3,
-        roles: rolesWithAnyAccess("reports", ["view"]),
-      },
+      { href: "/expenses", label: "ค่าใช้จ่าย", icon: Receipt, pageKey: "expenses" },
+      { href: "/reports", label: "รายงาน", icon: BarChart3, pageKey: "reports" },
     ],
   },
   {
     label: "ระบบ",
     items: [
-      {
-        href: "/users",
-        label: "จัดการผู้ใช้",
-        icon: Users,
-        roles: rolesWithAnyAccess("user_management", ["view", "invite"]),
-      },
-      {
-        href: "/settings",
-        label: "ตั้งค่าระบบ",
-        icon: Settings,
-        roles: rolesWithAnyAccess("settings"),
-      },
+      { href: "/users", label: "จัดการผู้ใช้", icon: Users, pageKey: "users" },
+      { href: "/settings", label: "ตั้งค่าระบบ", icon: Settings, pageKey: "settings" },
     ],
   },
   {
     label: "ช่วยเหลือ",
-    items: [
-      {
-        href: "/guide",
-        label: "คู่มือการใช้งาน",
-        icon: HelpCircle,
-        // Documentation only — no data behind it, so every role can see it,
-        // not just the ones with access to a given feature.
-        roles: new Set(ALL_ROLES),
-      },
-    ],
+    items: [{ href: "/guide", label: "คู่มือการใช้งาน", icon: HelpCircle }],
   },
 ];
+
+export function getNavItemsWithState(
+  role: UserRole,
+  permMap: RolePagePermissionMap,
+): (Omit<NavGroup, "items"> & { items: (NavItem & { disabled: boolean })[] })[] {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.map((item) => ({
+      ...item,
+      disabled: item.pageKey ? !canAccessPage(role, item.pageKey, permMap) : false,
+    })),
+  }));
+}
+
+// Thai label per pageKey, derived from NAV_GROUPS so it can't drift from the
+// sidebar's own labels — used by the Settings permission grid (Task 6).
+export const PAGE_KEY_LABELS: Record<PageKey, string> = Object.fromEntries(
+  NAV_GROUPS.flatMap((g) => g.items)
+    .filter((item): item is NavItem & { pageKey: PageKey } => item.pageKey !== undefined)
+    .map((item) => [item.pageKey, item.label]),
+) as Record<PageKey, string>;
 
 export const ROLE_LABELS: Record<string, string> = {
   owner: "เจ้าของร้าน",

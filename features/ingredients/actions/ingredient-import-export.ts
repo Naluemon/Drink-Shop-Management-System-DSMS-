@@ -147,7 +147,7 @@ export async function commitIngredientImport(rows: ParsedIngredientRow[]): Promi
     validRows.push(row);
   }
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
   const supplierCache = new Map<string, string>();
   let createdCount = 0;
   const stockInFailures: { rowNumber: number; name: string; reason: string }[] = [];

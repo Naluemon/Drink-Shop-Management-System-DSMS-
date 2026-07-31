@@ -73,7 +73,7 @@ export async function recordStockIn(input: StockInInput) {
   const result = stockInSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const movement = await prisma.$transaction(async (tx) => {
     const m = await tx.inventoryMovement.create({
@@ -117,7 +117,7 @@ export async function recordStockOut(input: StockOutInput) {
   });
   if (!validReasonCode) return { error: "เหตุผลที่เลือกไม่ถูกต้องหรือถูกปิดใช้งานแล้ว" };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
   const companySettings = await getOrCreateCompanySettings();
 
   try {
@@ -178,7 +178,7 @@ export async function recordAdjustment(input: AdjustmentInput) {
   const result = adjustmentSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const movement = await prisma.$transaction(async (tx) => {
     const m = await tx.inventoryMovement.create({

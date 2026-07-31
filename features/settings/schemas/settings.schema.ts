@@ -83,3 +83,27 @@ export const reasonCodeUpdateSchema = z.object({
 });
 
 export type ReasonCodeUpdateInput = z.infer<typeof reasonCodeUpdateSchema>;
+
+import { PAGE_KEYS } from "@/lib/page-access";
+
+const NON_OWNER_ROLE_VALUES = [
+  "manager",
+  "shift_supervisor",
+  "cashier",
+  "employee",
+  "accountant",
+] as const;
+
+export const rolePagePermissionUpdateSchema = z.object({
+  changes: z
+    .array(
+      z.object({
+        role: z.enum(NON_OWNER_ROLE_VALUES),
+        pageKey: z.enum(PAGE_KEYS),
+        allowed: z.coerce.boolean(),
+      }),
+    )
+    .min(1, "ไม่มีการเปลี่ยนแปลง"),
+});
+
+export type RolePagePermissionUpdateInput = z.infer<typeof rolePagePermissionUpdateSchema>;

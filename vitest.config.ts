@@ -15,9 +15,9 @@ export default defineConfig({
     exclude: [
       "**/node_modules/**",
       "**/.next/**",
+      "**/.claude/**",
       "**/e2e/**",
       "**/lib/generated/**",
-      ".claude/**",
     ],
   },
 });

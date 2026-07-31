@@ -75,7 +75,7 @@ export async function createModifierGroup(input: ModifierGroupInput) {
   const result = modifierGroupSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
 
   const existingGroup = await prisma.modifierGroup.findFirst({
     where: {

@@ -126,26 +126,46 @@ enum ReceiptPaperWidth {
 // in sync manually (see AGENTS.md §9 Maker-Checker gate).
 // ============================================================================
 
-model Branch {
+model Organization {
   id        String   @id @default(uuid())
   name      String
-  isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  branches        Branch[]
+  users           User[]
+  invites         UserInvite[]
+  companySettings CompanySettings?
+  taxSettings     TaxSettings?
+  reasonCodes     ReasonCode[]
+
+  @@map("organizations")
+}
+
+model Branch {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
 
   @@map("branches")
 }
 
 model User {
-  id               String    @id @default(uuid())
-  email            String    @unique
-  fullName         String    @map("full_name")
+  id               String       @id @default(uuid())
+  organizationId   String       @map("organization_id")
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  email            String       @unique
+  fullName         String       @map("full_name")
   role             UserRole
-  isActive         Boolean   @default(true) @map("is_active")
-  failedLoginCount Int       @default(0) @map("failed_login_count")
-  lockedUntil      DateTime? @map("locked_until")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  isActive         Boolean      @default(true) @map("is_active")
+  failedLoginCount Int          @default(0) @map("failed_login_count")
+  lockedUntil      DateTime?    @map("locked_until")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
 
   invitesSent UserInvite[] @relation("InvitedBy")
 
@@ -154,18 +174,52 @@ model User {
 
 /// DECISIONS.md D6 — bootstrap owner (first signup) + invite-only afterwards
 model UserInvite {
-  id          String    @id @default(uuid())
-  email       String
-  role        UserRole
-  invitedById String    @map("invited_by")
-  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
-  token       String    @unique
-  expiresAt   DateTime  @map("expires_at")
-  acceptedAt  DateTime? @map("accepted_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  email          String
+  role           UserRole
+  invitedById    String       @map("invited_by")
+  invitedBy      User         @relation("InvitedBy", fields: [invitedById], references: [id])
+  token          String       @unique
+  expiresAt      DateTime     @map("expires_at")
+  acceptedAt     DateTime?    @map("accepted_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
 
   @@index([email])
   @@map("user_invites")
+}
+
+// Owner-configurable "can this role open this page at all" table — replaces
+// the hardcoded per-page role checks in app/*/page.tsx (see
+// docs/superpowers/specs/2026-07-30-role-page-permissions-design.md).
+// `owner` intentionally never gets a row here — lib/page-access.ts's
+// canAccessPage() hardcodes owner to always pass, independent of this table.
+// TODO(multi-tenant): Phase B needs `organizationId` + an RLS policy here — this table predates that migration and is currently global/single-tenant.
+model RolePagePermission {
+  id        String   @id @default(uuid())
+  role      UserRole
+  pageKey   String   @map("page_key")
+  allowed   Boolean
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by") // null = untouched since the deploy-time seed
+
+  @@unique([role, pageKey])
+  @@map("role_page_permissions")
+}
+
+/// Append-only audit trail for RolePagePermission edits made through the
+/// Settings screen. Never updated or deleted, only inserted.
+// TODO(multi-tenant): Phase B needs `organizationId` + an RLS policy here — this table predates that migration and is currently global/single-tenant.
+model PermissionChangeLog {
+  id        String   @id @default(uuid())
+  role      UserRole
+  pageKey   String   @map("page_key")
+  allowed   Boolean
+  changedBy String   @map("changed_by")
+  changedAt DateTime @default(now()) @map("changed_at")
+
+  @@map("permission_change_logs")
 }
 
 // ============================================================================
@@ -175,6 +229,8 @@ model UserInvite {
 
 model CompanySettings {
   id                   String             @id @default(uuid())
+  organizationId       String             @unique @map("organization_id")
+  organization         Organization       @relation(fields: [organizationId], references: [id])
   timezone             String             @default("Asia/Bangkok")
   businessDayStartHour Int                @default(5) @map("business_day_start_hour") // 0-23
   isVatRegistered      Boolean            @default(false) @map("is_vat_registered")
@@ -200,12 +256,14 @@ model CompanySettings {
 }
 
 model TaxSettings {
-  id                      String   @id @default(uuid())
-  vatMode                 VatMode  @default(inclusive) @map("vat_mode")
-  vatRate                 Decimal  @default(7.00) @map("vat_rate") @db.Decimal(5, 2)
-  refundApprovalThreshold Decimal  @default(500.00) @map("refund_approval_threshold") @db.Decimal(12, 2)
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  id                      String       @id @default(uuid())
+  organizationId          String       @unique @map("organization_id")
+  organization            Organization @relation(fields: [organizationId], references: [id])
+  vatMode                 VatMode      @default(inclusive) @map("vat_mode")
+  vatRate                 Decimal      @default(7.00) @map("vat_rate") @db.Decimal(5, 2)
+  refundApprovalThreshold Decimal      @default(500.00) @map("refund_approval_threshold") @db.Decimal(12, 2)
+  createdAt               DateTime     @default(now()) @map("created_at")
+  updatedAt               DateTime     @updatedAt @map("updated_at")
 
   @@map("tax_settings")
 }
@@ -216,15 +274,17 @@ model TaxSettings {
 // inventory_movements.reason_code — seeded rows keep the original default
 // codes ("spoiled", "broken", ...) so historical movements stay valid.
 model ReasonCode {
-  id        String    @id @default(uuid())
-  code      String    @unique
-  label     String
-  isActive  Boolean   @default(true) @map("is_active")
-  deletedAt DateTime? @map("deleted_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  createdBy String    @map("created_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  updatedBy String?   @map("updated_by")
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String       @unique
+  label          String
+  isActive       Boolean      @default(true) @map("is_active")
+  deletedAt      DateTime?    @map("deleted_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  createdBy      String       @map("created_by")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  updatedBy      String?      @map("updated_by")
 
   @@map("reason_codes")
 }

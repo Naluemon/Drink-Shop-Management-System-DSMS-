@@ -34,6 +34,8 @@ matrix นี้ต้องตรงกับทั้ง Application-layer che
 - Manager invite ผู้ใช้ใหม่ได้เฉพาะ role Shift Supervisor/Cashier/Employee เท่านั้น ห้าม invite เป็น Owner/Manager/**Accountant** (Accountant เป็นบุคคลภายนอกที่เห็นข้อมูลการเงิน ต้องผ่าน Owner เท่านั้น — ดู `DECISIONS.md` D14)
 - Accountant **ไม่มีสิทธิ์เข้า** POS, Inventory, Settings, User Management เด็ดขาด (least privilege เพราะมักเป็นบุคคล/สำนักงานบัญชีภายนอก)
 
+**การเข้าหน้าเมนู (page access) ปรับได้ตอน runtime แล้ว — แต่ปรับได้ทางเดียวคือ "ปิด"** (ดู `DECISIONS.md` D19): ตั้งแต่ feature `role_page_permissions` เป็นต้นไป การตัดสินว่าตำแหน่งไหนเปิดหน้าไหนได้ ไม่ได้ hardcode ในโค้ดแต่ละหน้าอีกต่อไป เจ้าของร้านปรับเองได้จากหน้า Settings โดยไม่ต้อง deploy ใหม่ แต่ปรับได้ **แค่ปิดกั้นให้แคบลงกว่าค่าเริ่มต้นเท่านั้น** (และเปิดกลับคืนได้ถ้าค่าเริ่มต้นเคยเปิดไว้) — ให้สิทธิ์เกินค่าเริ่มต้นไม่ได้ บังคับฝั่ง server ที่ `updateRolePagePermissions()` เทียบกับ `DEFAULT_ALLOWED_ROLES` ใน `lib/page-access.ts` เพราะ CRUD matrix ข้างบนนี้ไม่ถูกแตะเลย ดังนั้น **ตารางและข้อห้ามเด็ดขาดในหัวข้อนี้ยังเป็นเพดานสูงสุดที่ใช้ได้จริงเสมอ** (เช่น Accountant ยังไม่มีทางเข้า POS/Inventory/Settings/User Management ได้ ไม่ว่าเจ้าของร้านจะตั้งค่าอย่างไร) สิ่งที่เจ้าของร้านทำได้คือทำให้แต่ละตำแหน่งเข้าถึงได้ **น้อยกว่า** ตารางนี้เท่านั้น ส่วน `owner` เข้าได้ทุกหน้าเสมอ ปิดตัวเองไม่ได้
+
 ## 2. Authentication
 
 - Supabase Auth: Email/Password + Google OAuth

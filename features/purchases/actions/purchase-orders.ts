@@ -109,7 +109,7 @@ export async function createPurchaseOrder(input: PurchaseOrderInput) {
   const result = purchaseOrderSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const branch = await getOrCreateDefaultBranch();
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
   const order = await prisma.purchaseOrder.create({
     data: {
       branchId: branch.id,

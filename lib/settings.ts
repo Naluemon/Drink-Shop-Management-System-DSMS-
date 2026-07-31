@@ -8,11 +8,15 @@ import { prisma } from "@/lib/prisma";
 export async function getOrCreateTaxSettings() {
   const existing = await prisma.taxSettings.findFirst();
   if (existing) return existing;
-  return prisma.taxSettings.create({ data: {} });
+  // Phase A (multi-tenant-phase-a-isolation): exactly one Organization exists
+  // until Phase B's self-service signup.
+  const organization = await prisma.organization.findFirstOrThrow();
+  return prisma.taxSettings.create({ data: { organizationId: organization.id } });
 }
 
 export async function getOrCreateCompanySettings() {
   const existing = await prisma.companySettings.findFirst();
   if (existing) return existing;
-  return prisma.companySettings.create({ data: {} });
+  const organization = await prisma.organization.findFirstOrThrow();
+  return prisma.companySettings.create({ data: { organizationId: organization.id } });
 }

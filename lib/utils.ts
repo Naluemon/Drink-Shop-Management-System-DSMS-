@@ -23,3 +23,20 @@ export function formatMoney(amount: number): string {
 export function formatBaht(amount: number): string {
   return `${formatMoney(amount)} บาท`;
 }
+
+// Client-only — triggers a browser download for a base64-encoded file
+// returned by a Server Action (export/report endpoints that hand back a
+// string or base64 body rather than a Route Handler response). Only call
+// from a "use client" component.
+export function downloadBase64File(filename: string, base64: string, mimeType: string) {
+  const byteChars = atob(base64);
+  const bytes = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}

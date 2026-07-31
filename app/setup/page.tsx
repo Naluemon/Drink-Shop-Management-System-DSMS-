@@ -2,6 +2,7 @@ import { bootstrapOwner, checkBootstrapStatus } from "@/features/auth/actions/bo
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandMark } from "@/components/brand-mark";
@@ -59,10 +60,9 @@ export default async function SetupPage(props: {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">รหัสผ่าน</Label>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 minLength={8}
                 className="focus:ring-primary/20 focus:border-primary h-11 transition-all"

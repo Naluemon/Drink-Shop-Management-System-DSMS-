@@ -97,6 +97,94 @@ export async function createInvite(input: InviteInput) {
   }
 }
 
+// รายการคำเชิญที่ยังไม่หมดอายุและยังไม่มีคนกดรับ — เดิมลิงก์เชิญโชว์ครั้งเดียวใน
+// dialog ตอนสร้างเท่านั้น ถ้าปิดหน้าไปโดยยังไม่ได้คัดลอกก็กู้คืนไม่ได้เลย ต้องมาดูซ้ำที่นี่
+// Owner เห็นคำเชิญทั้งหมดของร้าน ส่วน Manager เห็นเฉพาะที่ตัวเองส่ง (roster เต็มยังเป็น
+// สิทธิ์ Owner เท่านั้นตาม FR-USR-01 เดิม)
+export async function listPendingInvites() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "กรุณาล็อกอินก่อน" };
+  }
+
+  const actor = await prisma.user.findUnique({ where: { id: user.id } });
+  if (!actor) {
+    return { error: "ไม่พบข้อมูลผู้ใช้" };
+  }
+
+  try {
+    requirePermission(actor.role, "invite", "user_management");
+  } catch (e) {
+    if (e instanceof PermissionError) return { error: "คุณไม่มีสิทธิ์ดูคำเชิญ" };
+    throw e;
+  }
+
+  const invites = await prisma.userInvite.findMany({
+    where: {
+      organizationId: actor.organizationId,
+      acceptedAt: null,
+      expiresAt: { gt: new Date() },
+      ...(actor.role === "owner" ? {} : { invitedById: actor.id }),
+    },
+    orderBy: { createdAt: "desc" },
+    include: { invitedBy: { select: { fullName: true } } },
+  });
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+  return {
+    invites: invites.map((invite) => ({
+      id: invite.id,
+      email: invite.email,
+      role: invite.role,
+      expiresAt: invite.expiresAt.toISOString(),
+      invitedByName: invite.invitedBy.fullName,
+      inviteLink: `${siteUrl}/invite/accept?token=${invite.token}`,
+    })),
+  };
+}
+
+// ยกเลิกคำเชิญที่ยังไม่หมดอายุได้เอง — เดิม createInvite() บล็อกอีเมลที่มี invite
+// ค้างอยู่ไม่ให้เชิญซ้ำ ทำให้ถ้าลิงก์หายต้องรอ 7 วันให้หมดอายุก่อนถึงจะเชิญอีเมล
+// เดิมใหม่ได้ ยกเลิกเองได้ตรงนี้จึงเชิญซ้ำได้ทันทีโดยไม่ต้องรอ
+export async function cancelInvite(inviteId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "กรุณาล็อกอินก่อน" };
+  }
+
+  const actor = await prisma.user.findUnique({ where: { id: user.id } });
+  if (!actor) {
+    return { error: "ไม่พบข้อมูลผู้ใช้" };
+  }
+
+  try {
+    requirePermission(actor.role, "invite", "user_management");
+  } catch (e) {
+    if (e instanceof PermissionError) return { error: "คุณไม่มีสิทธิ์ยกเลิกคำเชิญ" };
+    throw e;
+  }
+
+  const invite = await prisma.userInvite.findUnique({ where: { id: inviteId } });
+  if (!invite || invite.organizationId !== actor.organizationId) {
+    return { error: "ไม่พบคำเชิญนี้" };
+  }
+  if (actor.role !== "owner" && invite.invitedById !== actor.id) {
+    return { error: "คุณไม่มีสิทธิ์ยกเลิกคำเชิญนี้" };
+  }
+
+  await prisma.userInvite.delete({ where: { id: inviteId } });
+  return { success: true };
+}
+
 // ยอมรับ invite และตั้งรหัสผ่าน
 export async function acceptInvite(token: string, formData: FormData) {
   const password = formData.get("password") as string;

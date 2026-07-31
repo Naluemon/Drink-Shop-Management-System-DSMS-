@@ -53,7 +53,7 @@ const EXPECTED: Record<Resource, Partial<Record<UserRole, Action[]>>> = {
     shift_supervisor: ["view"],
   },
   pos_sale: {
-    owner: ["view"],
+    owner: ["view", "create"],
     manager: ["view"],
     shift_supervisor: ["create"],
     cashier: ["create"],
@@ -65,8 +65,8 @@ const EXPECTED: Record<Resource, Partial<Record<UserRole, Action[]>>> = {
     cashier: ["create"],
   },
   pos_refund: {
-    owner: ["create", "view", "update", "delete", "approve"],
-    manager: ["create", "view", "update", "delete", "approve"],
+    owner: ["create", "view", "update", "delete", "approve", "request"],
+    manager: ["create", "view", "update", "delete", "approve", "request"],
     shift_supervisor: ["approve"],
     cashier: ["request"],
   },

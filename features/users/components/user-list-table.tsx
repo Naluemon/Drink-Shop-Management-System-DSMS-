@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { toggleUserActive, updateUserRole } from "@/features/users/actions/manage-users";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -97,6 +97,11 @@ export async function createIngredient(input: IngredientInput) {
         result.data.lowStockThreshold === "" || result.data.lowStockThreshold === undefined
           ? null
           : result.data.lowStockThreshold,
+      shelfLifeDaysAfterOpening:
+        result.data.shelfLifeDaysAfterOpening === "" ||
+        result.data.shelfLifeDaysAfterOpening === undefined
+          ? null
+          : result.data.shelfLifeDaysAfterOpening,
       supplierId: result.data.supplierId || null,
       createdBy: actor.id,
     },
@@ -156,9 +161,62 @@ export async function updateIngredient(id: string, input: IngredientInput) {
         result.data.lowStockThreshold === "" || result.data.lowStockThreshold === undefined
           ? null
           : result.data.lowStockThreshold,
+      shelfLifeDaysAfterOpening:
+        result.data.shelfLifeDaysAfterOpening === "" ||
+        result.data.shelfLifeDaysAfterOpening === undefined
+          ? null
+          : result.data.shelfLifeDaysAfterOpening,
       supplierId: result.data.supplierId || null,
       updatedBy: actor.id,
     },
+  });
+
+  return { success: true };
+}
+
+// เปิดใช้วันนี้ — เริ่มนับอายุการใช้งานหลังเปิด (shelfLifeDaysAfterOpening วัน
+// นับจากตอนนี้). เรียกซ้ำได้เรื่อยๆ ทุกครั้งที่เปิดของชิ้นใหม่ ค่าเก่าจะถูกเขียนทับ
+export async function markIngredientOpened(id: string) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "update", "ingredient");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขวัตถุดิบ") };
+  }
+
+  const current = await prisma.ingredient.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบวัตถุดิบ" };
+  if (!current.shelfLifeDaysAfterOpening) {
+    return { error: "วัตถุดิบนี้ยังไม่ได้ตั้งค่าอายุการใช้งานหลังเปิด" };
+  }
+
+  await prisma.ingredient.update({
+    where: { id },
+    data: { openedAt: new Date(), updatedBy: actor.id },
+  });
+
+  return { success: true };
+}
+
+// ยกเลิกการนับอายุการใช้งาน — กรณีกดผิดหรืออยากเริ่มนับใหม่ทีหลัง
+export async function clearIngredientOpened(id: string) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "update", "ingredient");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขวัตถุดิบ") };
+  }
+
+  const current = await prisma.ingredient.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบวัตถุดิบ" };
+
+  await prisma.ingredient.update({
+    where: { id },
+    data: { openedAt: null, updatedBy: actor.id },
   });
 
   return { success: true };

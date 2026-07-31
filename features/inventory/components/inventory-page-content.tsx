@@ -26,6 +26,7 @@ export interface StockLevelRow {
   baseUnit: string;
   currentStockQty: string;
   lowStockThreshold: string | null;
+  unitConversions: { id: string; purchaseUnitName: string; conversionFactor: string }[];
 }
 
 interface InventoryPageContentProps {
@@ -62,6 +63,7 @@ export function InventoryPageContent({
     id: i.id,
     name: i.name,
     baseUnit: i.baseUnit,
+    unitConversions: i.unitConversions,
   }));
 
   function handleRecorded() {

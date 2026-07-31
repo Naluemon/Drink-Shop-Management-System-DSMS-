@@ -43,3 +43,6 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+
+# superpowers brainstorming visual companion
+/.superpowers/

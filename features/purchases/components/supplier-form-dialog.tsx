@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { Plus, Pencil } from "lucide-react";
 import { createSupplier, updateSupplier } from "../actions/suppliers";
 import { Button } from "@/components/ui/button";
@@ -62,8 +62,8 @@ export function SupplierFormDialog({ mode, initialValues, onSaved }: SupplierFor
       onSaved?.({ id, name, contactInfo });
       toast.success(mode === "create" ? "เพิ่มผู้จำหน่ายสำเร็จ" : "แก้ไขผู้จำหน่ายสำเร็จ");
 
+      setOpen(false);
       if (mode === "create") {
-        setOpen(false);
         setName("");
         setContactInfo("");
       }

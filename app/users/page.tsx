@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/features/auth/actions/profile";
 import { listUsers } from "@/features/users/actions/manage-users";
+import { listPendingInvites } from "@/features/auth/actions/invite";
 import { logout } from "@/features/auth/actions/logout";
 import { canAccessPage } from "@/lib/page-access";
 import { getRolePagePermissionMap } from "@/lib/page-access-server";
@@ -8,6 +9,7 @@ import { listRolePagePermissions } from "@/features/settings/actions/role-page-p
 import { AppShell } from "@/components/app-shell";
 import { InviteUserDialog } from "@/features/users/components/invite-user-dialog";
 import { UserListTable } from "@/features/users/components/user-list-table";
+import { PendingInvitesList } from "@/features/users/components/pending-invites-list";
 import { RolePermissionGrid } from "@/features/settings/components/role-permission-grid";
 import { PermissionChangeLog } from "@/features/settings/components/permission-change-log";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +46,7 @@ export default async function UsersPage(props: {
 
   const usersResult = role === "owner" ? await listUsers() : null;
   const rolePermResult = role === "owner" ? await listRolePagePermissions() : null;
+  const pendingInvitesResult = await listPendingInvites();
 
   return (
     <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
@@ -61,6 +64,25 @@ export default async function UsersPage(props: {
           </div>
           <InviteUserDialog actorRole={role} />
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">คำเชิญที่รอดำเนินการ</CardTitle>
+            <CardDescription>
+              คัดลอกลิงก์เชิญซ้ำได้ถ้าลิงก์เดิมหาย หรือยกเลิกเพื่อเชิญอีเมลเดิมใหม่ได้ทันที
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {"error" in pendingInvitesResult ? (
+              <p className="text-destructive text-sm">{pendingInvitesResult.error}</p>
+            ) : (
+              <PendingInvitesList
+                initialInvites={pendingInvitesResult.invites ?? []}
+                showInviter={role === "owner"}
+              />
+            )}
+          </CardContent>
+        </Card>
 
         {role === "owner" && usersResult && (
           <Card>

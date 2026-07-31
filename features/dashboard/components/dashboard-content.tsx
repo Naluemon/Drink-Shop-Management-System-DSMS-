@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Package, AlertTriangle, Coins } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   LowStockBanner,
@@ -11,6 +11,8 @@ import type { TrendPoint } from "../actions/dashboard";
 import { RevenueTrendChart } from "./revenue-trend-chart";
 import { TodayBreakdownBar } from "./today-breakdown-bar";
 import { BestSellerBars } from "./best-seller-bars";
+import { RunningOutSoonList, type RunningOutSoonItem } from "./running-out-soon-list";
+import { ExpiringSoonList, type ExpiringSoonItem } from "./expiring-soon-list";
 import { formatBaht } from "@/lib/utils";
 
 export interface PeriodSummary {
@@ -25,6 +27,13 @@ export interface PeriodSummary {
 export interface BestSellerRow {
   name: string;
   qty: number;
+  categoryName: string | null;
+}
+
+export interface IngredientOverview {
+  totalCount: number;
+  lowStockCount: number;
+  totalStockValue: number;
 }
 
 interface DashboardContentProps {
@@ -32,6 +41,9 @@ interface DashboardContentProps {
   yesterday: PeriodSummary;
   bestSellers: BestSellerRow[];
   lowStockItems: LowStockItem[];
+  ingredientOverview: IngredientOverview;
+  runningOutSoon: RunningOutSoonItem[];
+  expiringSoon: ExpiringSoonItem[];
   trend: TrendPoint[];
 }
 
@@ -62,6 +74,7 @@ function KpiCard({
   value,
   delta,
   accentColor,
+  icon,
   testId,
 }: {
   title: string;
@@ -71,12 +84,16 @@ function KpiCard({
   // metric uses in the trend/breakdown charts below, so a KPI card and its
   // matching chart line are recognizable as "the same thing" at a glance.
   accentColor?: string;
+  icon?: ReactNode;
   testId?: string;
 }) {
   return (
     <Card className="border-l-4" style={accentColor ? { borderLeftColor: accentColor } : undefined}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-muted-foreground text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="text-muted-foreground flex items-center gap-1.5 text-sm font-medium">
+          {icon}
+          {title}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="font-heading text-2xl font-semibold" data-testid={testId}>
@@ -96,10 +113,62 @@ export function DashboardContent({
   yesterday,
   bestSellers,
   lowStockItems,
+  ingredientOverview,
+  runningOutSoon,
+  expiringSoon,
   trend,
 }: DashboardContentProps) {
   return (
     <div className="space-y-6">
+      <div>
+        <h2 className="font-heading text-foreground mb-3 text-lg font-semibold tracking-tight">
+          ภาพรวมวัตถุดิบภายในร้าน
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <KpiCard
+            title="วัตถุดิบทั้งหมด"
+            value={`${ingredientOverview.totalCount} รายการ`}
+            icon={<Package className="size-4" />}
+            accentColor="var(--chart-5)"
+          />
+          <KpiCard
+            title="วัตถุดิบใกล้หมด"
+            value={`${ingredientOverview.lowStockCount} รายการ`}
+            icon={<AlertTriangle className="size-4" />}
+            accentColor={
+              ingredientOverview.lowStockCount > 0 ? "var(--destructive)" : "var(--chart-4)"
+            }
+            testId="kpi-low-stock-count"
+          />
+          <KpiCard
+            title="มูลค่าสต็อกคงเหลือ"
+            value={formatBaht(ingredientOverview.totalStockValue)}
+            icon={<Coins className="size-4" />}
+            accentColor="var(--chart-4)"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">วัตถุดิบที่จะหมดเร็ว</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RunningOutSoonList items={runningOutSoon} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">วัตถุดิบใกล้หมดอายุ (หลังเปิดใช้)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ExpiringSoonList items={expiringSoon} />
+          </CardContent>
+        </Card>
+      </div>
+
       <LowStockBanner items={lowStockItems} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">

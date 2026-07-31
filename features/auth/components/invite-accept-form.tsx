@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { PrivacyNotice } from "./privacy-notice";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 
 interface InviteAcceptFormProps {
@@ -23,10 +23,9 @@ export function InviteAcceptForm({ action }: InviteAcceptFormProps) {
       <input type="hidden" name="acceptPdpa" value="true" />
       <div className="space-y-2">
         <Label htmlFor="password">รหัสผ่าน</Label>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           required
           minLength={8}
           className="focus:ring-primary/20 focus:border-primary h-11 transition-all"
@@ -35,10 +34,9 @@ export function InviteAcceptForm({ action }: InviteAcceptFormProps) {
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirmPassword">ยืนยันรหัสผ่าน</Label>
-        <Input
+        <PasswordInput
           id="confirmPassword"
           name="confirmPassword"
-          type="password"
           required
           minLength={8}
           className="focus:ring-primary/20 focus:border-primary h-11 transition-all"

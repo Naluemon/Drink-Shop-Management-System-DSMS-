@@ -41,6 +41,8 @@ export default async function IngredientsPage() {
     costPerUnit: i.costPerUnit.toString(),
     currentStockQty: i.currentStockQty.toString(),
     lowStockThreshold: i.lowStockThreshold?.toString() ?? null,
+    shelfLifeDaysAfterOpening: i.shelfLifeDaysAfterOpening,
+    openedAt: i.openedAt?.toISOString() ?? null,
     supplierId: i.supplierId,
     supplierName: i.supplier?.name ?? null,
     unitConversions: i.unitConversions.map((c) => ({

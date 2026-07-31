@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateCompanySettings, getOrCreateTaxSettings } from "@/lib/settings";
 import { isInBusinessDay } from "@/lib/business-day";
+import { DEFAULT_PAGE_SIZE, getSkip, getTotalPages } from "@/lib/pagination";
 import { voidSchema, refundRequestSchema } from "../schemas/pos.schema";
 
 async function getActor() {
@@ -298,7 +299,7 @@ export async function rejectRefund(requestId: string) {
 // Owner/Manager see every cashier's sales; Shift Supervisor/Cashier see only
 // their own (they can still request a refund on someone else's old sale via
 // the approval queue's context, but the quick-action list here is "my sales").
-export async function listRecentTransactions(limit = 30) {
+export async function listRecentTransactions(page = 1) {
   const actor = await getActor();
   if (!actor) return { error: "กรุณาล็อกอินก่อน" };
 
@@ -309,12 +310,16 @@ export async function listRecentTransactions(limit = 30) {
       ? { reversalOfId: null }
       : { reversalOfId: null, cashierId: actor.id };
 
-  const transactions = await prisma.salesTransaction.findMany({
-    where,
-    include: { items: true },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
+  const [transactions, total] = await Promise.all([
+    prisma.salesTransaction.findMany({
+      where,
+      include: { items: true },
+      orderBy: { createdAt: "desc" },
+      skip: getSkip(page),
+      take: DEFAULT_PAGE_SIZE,
+    }),
+    prisma.salesTransaction.count({ where }),
+  ]);
 
   const voidedIds = new Set(
     (
@@ -350,5 +355,58 @@ export async function listRecentTransactions(limit = 30) {
         companySettings.businessDayStartHour,
       ),
     })),
+    page,
+    totalPages: getTotalPages(total),
+    total,
+  };
+}
+
+// Row-click detail view for "รายการขายล่าสุด" — same visibility rule as
+// listRecentTransactions/getReceiptData (Owner/Manager see any sale,
+// everyone else only their own). voidReason lives on the reversal row
+// (createReversal above), not the original, so it's read off that row.
+export async function getTransactionDetail(id: string) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  const transaction = await prisma.salesTransaction.findUnique({
+    where: { id },
+    include: { items: { include: { menu: true, menuVariant: true, modifiers: true } } },
+  });
+  if (!transaction) return { error: "ไม่พบรายการขาย" };
+
+  const canViewAny = actor.role === "owner" || actor.role === "manager";
+  if (!canViewAny && transaction.cashierId !== actor.id) {
+    return { error: "คุณไม่มีสิทธิ์ดูรายการนี้" };
+  }
+
+  const reversal = await prisma.salesTransaction.findFirst({ where: { reversalOfId: id } });
+  const pendingRefund = await prisma.refundRequest.findFirst({
+    where: { salesTransactionId: id, status: "pending" },
+  });
+
+  return {
+    transaction: {
+      id: transaction.id,
+      createdAt: transaction.createdAt.toISOString(),
+      paymentMethod: transaction.paymentMethod,
+      subtotal: transaction.subtotal.toString(),
+      discountAmount: transaction.discountAmount.toString(),
+      roundingAdjustment: transaction.roundingAdjustment.toString(),
+      totalAmount: transaction.totalAmount.toString(),
+      isVoided: !!reversal,
+      voidReason: reversal?.voidReason ?? null,
+      hasPendingRefund: !!pendingRefund,
+      items: transaction.items.map((item) => ({
+        name: item.menuVariant ? `${item.menu.name} (${item.menuVariant.name})` : item.menu.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice.toString(),
+        discountAmount: item.discountAmount.toString(),
+        modifiers: item.modifiers.map((m) => ({
+          name: m.modifierNameSnapshot,
+          priceDelta: m.priceDeltaSnapshot.toString(),
+        })),
+      })),
+    },
   };
 }

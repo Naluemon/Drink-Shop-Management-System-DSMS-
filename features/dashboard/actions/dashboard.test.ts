@@ -17,7 +17,7 @@ vi.mock("@/lib/settings", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
-import { getDashboardTrend } from "./dashboard";
+import { getDashboardTrend, getDashboardData } from "./dashboard";
 
 const prismaMock = prisma as unknown as ReturnType<typeof mockDeep<PrismaClient>>;
 
@@ -96,5 +96,204 @@ describe("getDashboardTrend", () => {
 
     const result = await getDashboardTrend("invalid" as never);
     expect("error" in result).toBe(true);
+  });
+});
+
+// groupBy()'s generic overloaded signature (select/take/orderBy variants)
+// doesn't structurally match Jest's mock function type, unlike the simpler
+// findMany/findUnique methods above — cast through unknown same as those do.
+function mockInventoryMovementGroupBy(
+  rows: { ingredientId: string; _sum: { quantity: number } }[],
+) {
+  (prismaMock.inventoryMovement.groupBy as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+    rows,
+  );
+}
+
+function ingredientRow(overrides: {
+  id: string;
+  name: string;
+  currentStockQty: number;
+  lowStockThreshold?: number | null;
+  openedAt?: Date | null;
+  shelfLifeDaysAfterOpening?: number | null;
+}) {
+  return {
+    id: overrides.id,
+    name: overrides.name,
+    baseUnit: "gram",
+    costPerUnit: 1,
+    currentStockQty: overrides.currentStockQty,
+    lowStockThreshold: overrides.lowStockThreshold ?? null,
+    openedAt: overrides.openedAt ?? null,
+    shelfLifeDaysAfterOpening: overrides.shelfLifeDaysAfterOpening ?? null,
+    supplierId: null,
+    deletedAt: null,
+  };
+}
+
+// getIngredientOverview() estimates "days remaining" from stock_out volume
+// over the last 14 days — a real usage-rate signal, distinct from the fixed
+// lowStockThreshold LowStockBanner already covers.
+describe("getDashboardData — runningOutSoon", () => {
+  function stubCommonQueries() {
+    getUser.mockResolvedValue({ data: { user: { id: "owner-1" } } });
+    (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(actorRow());
+    prismaMock.$queryRaw.mockResolvedValue([] as never);
+    prismaMock.expenseEntry.findMany.mockResolvedValue([] as never);
+    prismaMock.salesTransaction.findMany.mockResolvedValue([] as never);
+  }
+
+  it("estimates days remaining from 14-day stock_out volume and flags it inside the 7-day window", async () => {
+    stubCommonQueries();
+    prismaMock.ingredient.findMany.mockResolvedValue([
+      ingredientRow({ id: "ing-1", name: "นมสด", currentStockQty: 700 }),
+    ] as never);
+    // 14-day total of 1400 -> 100/day average -> 700 / 100 = 7 days remaining
+    mockInventoryMovementGroupBy([{ ingredientId: "ing-1", _sum: { quantity: 1400 } }]);
+
+    const result = await getDashboardData();
+    if ("error" in result) throw new Error(result.error);
+
+    expect(result.runningOutSoon).toEqual([
+      expect.objectContaining({ name: "นมสด", daysRemaining: 7 }),
+    ]);
+  });
+
+  it("excludes an ingredient whose usage rate puts it beyond the 7-day window", async () => {
+    stubCommonQueries();
+    prismaMock.ingredient.findMany.mockResolvedValue([
+      ingredientRow({ id: "ing-1", name: "น้ำตาล", currentStockQty: 10_000 }),
+    ] as never);
+    // 100/day average -> 100 days remaining, well outside the window
+    mockInventoryMovementGroupBy([{ ingredientId: "ing-1", _sum: { quantity: 1400 } }]);
+
+    const result = await getDashboardData();
+    if ("error" in result) throw new Error(result.error);
+
+    expect(result.runningOutSoon).toEqual([]);
+  });
+
+  it("skips an ingredient with no stock_out history at all (no usage-rate signal to estimate from)", async () => {
+    stubCommonQueries();
+    prismaMock.ingredient.findMany.mockResolvedValue([
+      ingredientRow({ id: "ing-1", name: "ไม่มีคนใช้เลย", currentStockQty: 1 }),
+    ] as never);
+    mockInventoryMovementGroupBy([]);
+
+    const result = await getDashboardData();
+    if ("error" in result) throw new Error(result.error);
+
+    expect(result.runningOutSoon).toEqual([]);
+  });
+
+  it("sorts multiple flagged ingredients soonest-first", async () => {
+    stubCommonQueries();
+    prismaMock.ingredient.findMany.mockResolvedValue([
+      ingredientRow({ id: "ing-slower", name: "ช้ากว่า", currentStockQty: 600 }), // 6 days
+      ingredientRow({ id: "ing-faster", name: "เร็วกว่า", currentStockQty: 200 }), // 2 days
+    ] as never);
+    mockInventoryMovementGroupBy([
+      { ingredientId: "ing-slower", _sum: { quantity: 1400 } }, // 100/day
+      { ingredientId: "ing-faster", _sum: { quantity: 1400 } }, // 100/day
+    ]);
+
+    const result = await getDashboardData();
+    if ("error" in result) throw new Error(result.error);
+
+    expect(result.runningOutSoon?.map((r) => r.name)).toEqual(["เร็วกว่า", "ช้ากว่า"]);
+  });
+});
+
+// getIngredientOverview() also flags ingredients by shelf-life-after-opening
+// (features/ingredients' markIngredientOpened()/clearIngredientOpened()) —
+// a separate freshness signal from runningOutSoon's stock-depletion estimate.
+describe("getDashboardData — expiringSoon", () => {
+  function stubCommonQueries() {
+    getUser.mockResolvedValue({ data: { user: { id: "owner-1" } } });
+    (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(actorRow());
+    prismaMock.$queryRaw.mockResolvedValue([] as never);
+    prismaMock.expenseEntry.findMany.mockResolvedValue([] as never);
+    prismaMock.salesTransaction.findMany.mockResolvedValue([] as never);
+    mockInventoryMovementGroupBy([]);
+  }
+
+  it("flags an ingredient opened long enough ago to be within the 3-day window", async () => {
+    stubCommonQueries();
+    const openedAt = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000); // opened 6 days ago
+    prismaMock.ingredient.findMany.mockResolvedValue([
+      ingredientRow({
+        id: "ing-1",
+        name: "ผงชาไทย",
+        currentStockQty: 500,
+        shelfLifeDaysAfterOpening: 7, // expires 1 day from now
+        openedAt,
+      }),
+    ] as never);
+
+    const result = await getDashboardData();
+    if ("error" in result) throw new Error(result.error);
+
+    expect(result.expiringSoon).toEqual([
+      expect.objectContaining({ name: "ผงชาไทย", daysRemaining: 1 }),
+    ]);
+  });
+
+  it("reports a negative daysRemaining once already past its shelf life", async () => {
+    stubCommonQueries();
+    const openedAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // opened 10 days ago
+    prismaMock.ingredient.findMany.mockResolvedValue([
+      ingredientRow({
+        id: "ing-1",
+        name: "ผงชาไทย",
+        currentStockQty: 500,
+        shelfLifeDaysAfterOpening: 7, // expired 3 days ago
+        openedAt,
+      }),
+    ] as never);
+
+    const result = await getDashboardData();
+    if ("error" in result) throw new Error(result.error);
+
+    expect(result.expiringSoon).toEqual([
+      expect.objectContaining({ name: "ผงชาไทย", daysRemaining: -3 }),
+    ]);
+  });
+
+  it("excludes an ingredient opened too recently to be within the window", async () => {
+    stubCommonQueries();
+    const openedAt = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000); // opened yesterday
+    prismaMock.ingredient.findMany.mockResolvedValue([
+      ingredientRow({
+        id: "ing-1",
+        name: "ผงชาไทย",
+        currentStockQty: 500,
+        shelfLifeDaysAfterOpening: 7, // 6 days still left
+        openedAt,
+      }),
+    ] as never);
+
+    const result = await getDashboardData();
+    if ("error" in result) throw new Error(result.error);
+
+    expect(result.expiringSoon).toEqual([]);
+  });
+
+  it("excludes an ingredient that isn't opened, even with shelfLifeDaysAfterOpening configured", async () => {
+    stubCommonQueries();
+    prismaMock.ingredient.findMany.mockResolvedValue([
+      ingredientRow({
+        id: "ing-1",
+        name: "ผงชาไทย",
+        currentStockQty: 500,
+        shelfLifeDaysAfterOpening: 7,
+        openedAt: null,
+      }),
+    ] as never);
+
+    const result = await getDashboardData();
+    if ("error" in result) throw new Error(result.error);
+
+    expect(result.expiringSoon).toEqual([]);
   });
 });

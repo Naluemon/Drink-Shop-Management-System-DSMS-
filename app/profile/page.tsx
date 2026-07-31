@@ -5,6 +5,7 @@ import { getRolePagePermissionMap } from "@/lib/page-access-server";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToastFromSearchParams } from "@/components/toast-from-search-params";
@@ -94,24 +95,18 @@ export default async function ProfilePage(props: {
             <form action={handleChangePassword} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="currentPassword">รหัสผ่านปัจจุบัน</Label>
-                <Input id="currentPassword" name="currentPassword" type="password" required />
+                <PasswordInput id="currentPassword" name="currentPassword" required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="newPassword">รหัสผ่านใหม่</Label>
-                <Input id="newPassword" name="newPassword" type="password" required minLength={8} />
+                <PasswordInput id="newPassword" name="newPassword" required minLength={8} />
                 <p className="text-muted-foreground text-xs">
                   รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร ผสมตัวเลข
                 </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">ยืนยันรหัสผ่านใหม่</Label>
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  required
-                  minLength={8}
-                />
+                <PasswordInput id="confirmPassword" name="confirmPassword" required minLength={8} />
               </div>
               <Button type="submit">เปลี่ยนรหัสผ่าน</Button>
             </form>

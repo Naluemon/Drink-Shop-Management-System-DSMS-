@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { toast } from "@/lib/sweet-alert";
 import { UserPlus } from "lucide-react";
 import { createInvite } from "@/features/auth/actions/invite";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ interface InviteUserDialogProps {
 }
 
 export function InviteUserDialog({ actorRole, onInvited }: InviteUserDialogProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("");
@@ -73,6 +75,7 @@ export function InviteUserDialog({ actorRole, onInvited }: InviteUserDialogProps
       }
       setInviteLink(result?.inviteLink ?? null);
       toast.success("ส่งคำเชิญสำเร็จ");
+      router.refresh();
       onInvited?.();
     });
   }

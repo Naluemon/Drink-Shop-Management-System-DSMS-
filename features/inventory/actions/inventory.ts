@@ -44,6 +44,7 @@ export async function listStockLevels() {
 
   const ingredients = await prisma.ingredient.findMany({
     where: { deletedAt: null },
+    include: { unitConversions: true },
     orderBy: { name: "asc" },
   });
 
@@ -54,6 +55,11 @@ export async function listStockLevels() {
       baseUnit: i.baseUnit,
       currentStockQty: i.currentStockQty.toString(),
       lowStockThreshold: i.lowStockThreshold?.toString() ?? null,
+      unitConversions: i.unitConversions.map((c) => ({
+        id: c.id,
+        purchaseUnitName: c.purchaseUnitName,
+        conversionFactor: c.conversionFactor.toString(),
+      })),
     })),
   };
 }

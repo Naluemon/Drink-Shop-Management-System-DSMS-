@@ -1,8 +1,12 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { toast } from "sonner";
-import { softDeleteIngredient } from "../actions/ingredients";
+import { toast, confirmDelete } from "@/lib/sweet-alert";
+import {
+  softDeleteIngredient,
+  markIngredientOpened,
+  clearIngredientOpened,
+} from "../actions/ingredients";
 import { exportIngredients } from "../actions/ingredient-import-export";
 import {
   IngredientFormDialog,
@@ -12,7 +16,6 @@ import {
 import { IngredientImportDialog } from "./ingredient-import-dialog";
 import { SearchInput } from "@/components/search-input";
 import { ExportMenuButton } from "@/components/export-menu-button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { formatNumber, downloadBase64File } from "@/lib/utils";
 import {
@@ -40,9 +43,19 @@ export interface IngredientRow {
   costPerUnit: string;
   currentStockQty: string;
   lowStockThreshold: string | null;
+  shelfLifeDaysAfterOpening: number | null;
+  openedAt: string | null;
   supplierId: string | null;
   supplierName: string | null;
   unitConversions: { id: string; purchaseUnitName: string; conversionFactor: string }[];
+}
+
+// "Simple" shelf-life-after-opening tracking (see ingredients.ts) — computes
+// how many days are left before an already-opened ingredient should be
+// thrown out, straight from openedAt + shelfLifeDaysAfterOpening.
+function daysRemainingAfterOpening(openedAt: string, shelfLifeDays: number): number {
+  const expiresAt = new Date(openedAt).getTime() + shelfLifeDays * 24 * 60 * 60 * 1000;
+  return Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
 }
 
 interface SupplierOption {
@@ -119,6 +132,12 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
       costPerUnit: fields.costPerUnit,
       currentStockQty: existing?.currentStockQty ?? "0",
       lowStockThreshold: fields.lowStockThreshold === "" ? null : fields.lowStockThreshold,
+      shelfLifeDaysAfterOpening:
+        fields.shelfLifeDaysAfterOpening === "" ? null : Number(fields.shelfLifeDaysAfterOpening),
+      // Not editable from this form — carries over from whatever it already
+      // was; markIngredientOpened()/clearIngredientOpened() are the only
+      // things that ever change it.
+      openedAt: existing?.openedAt ?? null,
       supplierId: fields.supplierId || null,
       supplierName: suppliers.find((s) => s.id === fields.supplierId)?.name ?? null,
       unitConversions: existing?.unitConversions ?? [],
@@ -133,7 +152,13 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
     setIngredients((prev) => prev.map((i) => (i.id === fields.id ? toRow(fields, i) : i)));
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string, name: string) {
+    const confirmed = await confirmDelete({
+      title: `ลบ "${name}" ใช่ไหม?`,
+      description: "วัตถุดิบนี้จะถูกนำออกจากรายการที่ใช้งานอยู่ กู้คืนได้ภายหลังหากจำเป็น",
+    });
+    if (!confirmed) return;
+
     setError(null);
     startTransition(async () => {
       const result = await softDeleteIngredient(id);
@@ -144,6 +169,34 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
       }
       setIngredients((prev) => prev.filter((i) => i.id !== id));
       toast.success("ลบวัตถุดิบสำเร็จ");
+    });
+  }
+
+  function handleMarkOpened(id: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await markIngredientOpened(id);
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      setIngredients((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, openedAt: new Date().toISOString() } : i)),
+      );
+      toast.success("บันทึกวันที่เปิดใช้แล้ว");
+    });
+  }
+
+  function handleClearOpened(id: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await clearIngredientOpened(id);
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      setIngredients((prev) => prev.map((i) => (i.id === id ? { ...i, openedAt: null } : i)));
+      toast.success("ยกเลิกการนับอายุการใช้งานแล้ว");
     });
   }
 
@@ -195,6 +248,7 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
             <TableHead>หน่วยฐาน</TableHead>
             <TableHead>ต้นทุน/หน่วย</TableHead>
             <TableHead>สต็อกคงเหลือ</TableHead>
+            <TableHead>อายุการใช้งานหลังเปิด</TableHead>
             <TableHead>ผู้จำหน่าย</TableHead>
             {canEdit && <TableHead className="text-right">จัดการ</TableHead>}
           </TableRow>
@@ -202,7 +256,7 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
         <TableBody>
           {filtered.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={canEdit ? 7 : 6} className="text-muted-foreground text-center">
+              <TableCell colSpan={canEdit ? 8 : 7} className="text-muted-foreground text-center">
                 ไม่พบวัตถุดิบ
               </TableCell>
             </TableRow>
@@ -224,6 +278,59 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
                       <span className="text-destructive ml-1 text-xs">(ใกล้หมด)</span>
                     )}
                 </TableCell>
+                <TableCell>
+                  {!i.shelfLifeDaysAfterOpening ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : !i.openedAt ? (
+                    canEdit ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isPending}
+                        onClick={() => handleMarkOpened(i.id)}
+                      >
+                        เปิดใช้วันนี้
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">ยังไม่เปิดใช้</span>
+                    )
+                  ) : (
+                    (() => {
+                      const daysLeft = daysRemainingAfterOpening(
+                        i.openedAt,
+                        i.shelfLifeDaysAfterOpening,
+                      );
+                      const expired = daysLeft < 0;
+                      const urgent = daysLeft <= 1;
+                      return (
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span
+                            className={
+                              expired || urgent
+                                ? "text-destructive font-semibold"
+                                : "text-muted-foreground"
+                            }
+                          >
+                            {expired
+                              ? `หมดอายุแล้ว ${Math.abs(daysLeft)} วัน — ควรทิ้ง`
+                              : daysLeft === 0
+                                ? "หมดอายุวันนี้"
+                                : `เหลือ ${daysLeft} วัน`}
+                          </span>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleClearOpened(i.id)}
+                              className="text-muted-foreground hover:text-foreground underline"
+                            >
+                              ยกเลิก
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()
+                  )}
+                </TableCell>
                 <TableCell className="text-muted-foreground">{i.supplierName ?? "—"}</TableCell>
                 {canEdit && (
                   <TableCell className="text-right">
@@ -239,19 +346,21 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
                             baseUnit: i.baseUnit,
                             costPerUnit: i.costPerUnit,
                             lowStockThreshold: i.lowStockThreshold ?? "",
+                            shelfLifeDaysAfterOpening:
+                              i.shelfLifeDaysAfterOpening?.toString() ?? "",
                             supplierId: i.supplierId ?? "",
                             unitConversions: i.unitConversions,
                           } satisfies IngredientFormValues
                         }
                       />
-                      <ConfirmDialog
-                        trigger={<Button size="sm" variant="destructive" disabled={isPending} />}
-                        triggerLabel="ลบ"
-                        title={`ลบ "${i.name}" ใช่ไหม?`}
-                        description="วัตถุดิบนี้จะถูกนำออกจากรายการที่ใช้งานอยู่ กู้คืนได้ภายหลังหากจำเป็น"
-                        confirmLabel="ลบ"
-                        onConfirm={() => handleDelete(i.id)}
-                      />
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={isPending}
+                        onClick={() => handleDelete(i.id, i.name)}
+                      >
+                        ลบ
+                      </Button>
                     </div>
                   </TableCell>
                 )}

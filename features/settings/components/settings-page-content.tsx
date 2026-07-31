@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import {
   updateCompanyInfo,
   updateTaxSettings,
@@ -9,16 +9,17 @@ import {
   updateBusinessHours,
   updateStockDeficitPolicy,
 } from "../actions/company-settings";
+import { updateRefundApprovalThreshold } from "../actions/refund-threshold";
 import { ReasonCodeManager, type ReasonCodeRow } from "./reason-code-manager";
 import {
   IngredientDeficitOverrides,
   type IngredientOverrideRow,
 } from "./ingredient-deficit-overrides";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -52,6 +53,7 @@ interface SettingsPageContentProps {
   taxSettings: TaxSettingsData;
   ingredients: IngredientOverrideRow[];
   reasonCodes: ReasonCodeRow[];
+  refundThreshold: string;
 }
 
 function SavedNote({ savedAt }: { savedAt: number | null }) {
@@ -456,40 +458,110 @@ function StockDeficitPolicySection({
   );
 }
 
-// Phase 12 — Settings. Owner-only (SECURITY.md §1). Refund approval threshold
-// (D5/D14, Phase 2) stays in its own server-rendered form in app/settings/page.tsx.
+// D5/D14 (Phase 2) — moved here from its own server-rendered form in
+// app/settings/page.tsx so it behaves like every other setting on this page
+// (instant save + toast, not a full-page redirect with a query-string
+// message) — that inconsistency was the one section that worked differently
+// from the rest for no reason tied to the data itself.
+function RefundThresholdSection({ initial }: { initial: string }) {
+  const [threshold, setThreshold] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSavedAt(null);
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set("threshold", threshold);
+      const result = await updateRefundApprovalThreshold(formData);
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+      setSavedAt(Date.now());
+      toast.success("บันทึกสำเร็จ");
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">วงเงินอนุมัติคืนเงินของหัวหน้ากะ</CardTitle>
+        <CardDescription>
+          Shift Supervisor อนุมัติคำขอคืนเงินได้เองถ้ายอดไม่เกินจำนวนนี้ ยอดที่เกินต้องส่งต่อ
+          Manager/Owner (DECISIONS.md D5, D14)
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {error && <p className="text-destructive text-sm">{error}</p>}
+          <div className="space-y-1">
+            <Label className="text-xs">วงเงิน (บาท)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value)}
+              required
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={isPending}>
+              บันทึก
+            </Button>
+            <SavedNote savedAt={savedAt} />
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Phase 12 — Settings. Owner-only (SECURITY.md §1). Grouped into two tabs
+// instead of one long stack of cards — "ร้านค้าและใบเสร็จ" covers what
+// prints on a receipt, "การดำเนินงาน" covers day-to-day operating policy.
+// Theme moved out entirely: it's a per-browser preference, not a shop-wide
+// setting, so it now lives in the sidebar's user menu (available to every
+// role, not just Owner) — see components/app-shell.tsx.
 export function SettingsPageContent({
   companySettings,
   taxSettings,
   ingredients,
   reasonCodes,
+  refundThreshold,
 }: SettingsPageContentProps) {
   return (
-    <div className="space-y-6">
-      <CompanyInfoSection initial={companySettings} />
-      <TaxSection initial={taxSettings} />
-      <ReceiptSection initial={companySettings} />
-      <BusinessHoursSection initial={companySettings} />
-      <StockDeficitPolicySection initial={companySettings} ingredients={ingredients} />
+    <Tabs defaultValue="store">
+      <TabsList>
+        <TabsTrigger value="store">ร้านค้าและใบเสร็จ</TabsTrigger>
+        <TabsTrigger value="operations">การดำเนินงาน</TabsTrigger>
+      </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">รายการเหตุผล (Stock Out)</CardTitle>
-          <CardDescription>ใช้เมื่อพนักงานตัดสต็อกออกแบบมีเอกสารอ้างอิง (D12)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ReasonCodeManager initialCodes={reasonCodes} />
-        </CardContent>
-      </Card>
+      <TabsContent value="store" className="space-y-6 pt-4">
+        <CompanyInfoSection initial={companySettings} />
+        <TaxSection initial={taxSettings} />
+        <ReceiptSection initial={companySettings} />
+      </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">ธีม</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ThemeToggle />
-        </CardContent>
-      </Card>
-    </div>
+      <TabsContent value="operations" className="space-y-6 pt-4">
+        <BusinessHoursSection initial={companySettings} />
+        <StockDeficitPolicySection initial={companySettings} ingredients={ingredients} />
+        <RefundThresholdSection initial={refundThreshold} />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">รายการเหตุผล (Stock Out)</CardTitle>
+            <CardDescription>ใช้เมื่อพนักงานตัดสต็อกออกแบบมีเอกสารอ้างอิง (D12)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ReasonCodeManager initialCodes={reasonCodes} />
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
   );
 }

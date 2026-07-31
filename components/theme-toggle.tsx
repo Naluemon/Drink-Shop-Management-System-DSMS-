@@ -23,34 +23,44 @@ export function ThemeToggle() {
   }, []);
 
   if (!mounted) {
-    return <div className="h-8 w-[196px]" />;
+    return <div className="h-8 w-[104px]" />;
   }
 
+  // Icon-only: this lives in the sidebar's user menu now (available to every
+  // role, not just Owner — a browser-local preference has no business being
+  // gated behind Settings' Owner-only page), where a tight dropdown has no
+  // room for the old three-button-with-labels layout.
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-1.5">
       <Button
         type="button"
-        size="sm"
+        size="icon"
         variant={theme === "light" ? "default" : "outline"}
         onClick={() => setTheme("light")}
+        aria-label="ธีมสว่าง"
+        title="สว่าง"
       >
-        <Sun /> สว่าง
+        <Sun />
       </Button>
       <Button
         type="button"
-        size="sm"
+        size="icon"
         variant={theme === "dark" ? "default" : "outline"}
         onClick={() => setTheme("dark")}
+        aria-label="ธีมมืด"
+        title="มืด"
       >
-        <Moon /> มืด
+        <Moon />
       </Button>
       <Button
         type="button"
-        size="sm"
+        size="icon"
         variant={theme === "system" ? "default" : "outline"}
         onClick={() => setTheme("system")}
+        aria-label="ธีมตามระบบ"
+        title="ตามระบบ"
       >
-        <Monitor /> ตามระบบ
+        <Monitor />
       </Button>
     </div>
   );

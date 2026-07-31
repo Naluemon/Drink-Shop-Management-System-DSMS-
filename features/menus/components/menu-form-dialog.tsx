@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { Plus, Pencil } from "lucide-react";
 import { createMenu, updateMenu } from "../actions/menus";
 import { VariantManager, type VariantRow, type RecipeOption } from "./variant-manager";
@@ -139,8 +139,8 @@ export function MenuFormDialog({
       });
       toast.success(mode === "create" ? "เพิ่มเมนูสำเร็จ" : "แก้ไขเมนูสำเร็จ");
 
+      setOpen(false);
       if (mode === "create") {
-        setOpen(false);
         setName("");
         setRecipeId("");
         setCategoryId(NO_CATEGORY);

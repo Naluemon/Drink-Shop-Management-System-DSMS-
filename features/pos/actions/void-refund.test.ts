@@ -26,7 +26,13 @@ vi.mock("@/lib/settings", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
-import { voidTransaction, approveRefund, rejectRefund } from "./void-refund";
+import {
+  voidTransaction,
+  approveRefund,
+  rejectRefund,
+  listRecentTransactions,
+  getTransactionDetail,
+} from "./void-refund";
 
 const prismaMock = prisma as unknown as ReturnType<typeof mockDeep<PrismaClient>>;
 
@@ -352,5 +358,180 @@ describe("rejectRefund", () => {
       expect.objectContaining({ data: expect.objectContaining({ status: "rejected" }) }),
     );
     expect(prismaMock.salesTransaction.create).not.toHaveBeenCalled();
+  });
+});
+
+// The register's "รายการขายล่าสุด" list used to just take(30) with no
+// pagination at all — this covers the DEFAULT_PAGE_SIZE-based skip/take math
+// and the page/totalPages/total metadata the UI's PaginationControls needs.
+describe("listRecentTransactions", () => {
+  beforeEach(() => {
+    mockReset(prismaMock);
+    getUser.mockReset();
+    prismaMock.salesTransaction.findMany.mockResolvedValue([] as never);
+    prismaMock.refundRequest.findMany.mockResolvedValue([] as never);
+  });
+
+  it("requests page 1 with a 0 skip by default", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "owner-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "owner-1", role: "owner" }) as never,
+    );
+    prismaMock.salesTransaction.count.mockResolvedValue(45 as never);
+
+    const result = await listRecentTransactions();
+
+    expect(prismaMock.salesTransaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 0, take: 20 }),
+    );
+    expect(result.page).toBe(1);
+    expect(result.total).toBe(45);
+    expect(result.totalPages).toBe(3);
+  });
+
+  it("skips a full page's worth of rows on page 2", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "owner-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "owner-1", role: "owner" }) as never,
+    );
+    prismaMock.salesTransaction.count.mockResolvedValue(45 as never);
+
+    const result = await listRecentTransactions(2);
+
+    expect(prismaMock.salesTransaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 20, take: 20 }),
+    );
+    expect(result.page).toBe(2);
+  });
+
+  it("scopes a Cashier to their own sales only, same as before pagination", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "cashier-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "cashier-1", role: "cashier" }) as never,
+    );
+    prismaMock.salesTransaction.count.mockResolvedValue(0 as never);
+
+    await listRecentTransactions();
+
+    expect(prismaMock.salesTransaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { reversalOfId: null, cashierId: "cashier-1" } }),
+    );
+  });
+});
+
+// Row-click detail view for the "รายการขายล่าสุด" table — needs the item's
+// menu/variant names (unlike listRecentTransactions, which only needs a count).
+describe("getTransactionDetail", () => {
+  const saleWithMenu = {
+    ...originalSale,
+    items: [
+      {
+        ...originalSale.items[0],
+        menu: { id: "menu-1", name: "ชาไทยเย็น" },
+        menuVariant: null,
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mockReset(prismaMock);
+    getUser.mockReset();
+  });
+
+  it("returns item detail with menu names for the cashier who made the sale", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "cashier-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "cashier-1", role: "cashier" }) as never,
+    );
+    prismaMock.salesTransaction.findUnique.mockResolvedValue(saleWithMenu as never);
+    prismaMock.salesTransaction.findFirst.mockResolvedValue(null); // no reversal
+    prismaMock.refundRequest.findFirst.mockResolvedValue(null);
+
+    const result = await getTransactionDetail("sale-1");
+
+    expect(result.error).toBeUndefined();
+    expect(result.transaction?.items).toEqual([
+      expect.objectContaining({
+        name: "ชาไทยเย็น",
+        quantity: 1,
+        unitPrice: "45",
+        modifiers: [expect.objectContaining({ name: "ไข่มุก", priceDelta: "10" })],
+      }),
+    ]);
+    expect(result.transaction?.isVoided).toBe(false);
+  });
+
+  it("includes the variant name in parentheses when the item has one", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "cashier-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "cashier-1", role: "cashier" }) as never,
+    );
+    prismaMock.salesTransaction.findUnique.mockResolvedValue({
+      ...saleWithMenu,
+      items: [{ ...saleWithMenu.items[0], menuVariant: { id: "v-1", name: "ไซส์ M" } }],
+    } as never);
+    prismaMock.salesTransaction.findFirst.mockResolvedValue(null);
+    prismaMock.refundRequest.findFirst.mockResolvedValue(null);
+
+    const result = await getTransactionDetail("sale-1");
+
+    expect(result.transaction?.items[0].name).toBe("ชาไทยเย็น (ไซส์ M)");
+  });
+
+  it("lets Owner/Manager view any cashier's sale", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "manager-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "manager-1", role: "manager" }) as never,
+    );
+    prismaMock.salesTransaction.findUnique.mockResolvedValue(saleWithMenu as never); // cashierId: "cashier-1"
+    prismaMock.salesTransaction.findFirst.mockResolvedValue(null);
+    prismaMock.refundRequest.findFirst.mockResolvedValue(null);
+
+    const result = await getTransactionDetail("sale-1");
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("refuses a Cashier viewing someone else's sale", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "cashier-2" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "cashier-2", role: "cashier" }) as never,
+    );
+    prismaMock.salesTransaction.findUnique.mockResolvedValue(saleWithMenu as never); // cashierId: "cashier-1"
+
+    const result = await getTransactionDetail("sale-1");
+
+    expect(result.error).toBeTruthy();
+    expect(result.transaction).toBeUndefined();
+  });
+
+  it("reports isVoided + the void reason read off the reversal row", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "manager-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "manager-1", role: "manager" }) as never,
+    );
+    prismaMock.salesTransaction.findUnique.mockResolvedValue(saleWithMenu as never);
+    prismaMock.salesTransaction.findFirst.mockResolvedValue({
+      id: "reversal-1",
+      voidReason: "ลูกค้าเปลี่ยนใจ",
+    } as never);
+    prismaMock.refundRequest.findFirst.mockResolvedValue(null);
+
+    const result = await getTransactionDetail("sale-1");
+
+    expect(result.transaction?.isVoided).toBe(true);
+    expect(result.transaction?.voidReason).toBe("ลูกค้าเปลี่ยนใจ");
+  });
+
+  it("returns an error when the transaction doesn't exist", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "manager-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "manager-1", role: "manager" }) as never,
+    );
+    prismaMock.salesTransaction.findUnique.mockResolvedValue(null);
+
+    const result = await getTransactionDetail("missing");
+
+    expect(result.error).toBeTruthy();
   });
 });

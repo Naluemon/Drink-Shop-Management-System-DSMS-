@@ -5,6 +5,7 @@ import { checkBootstrapStatus } from "@/features/auth/actions/bootstrap";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandMark } from "@/components/brand-mark";
@@ -58,10 +59,9 @@ export default async function LoginPage(props: {
                   ลืมรหัสผ่าน?
                 </Link>
               </div>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 className="focus:ring-primary/20 focus:border-primary h-11 transition-all"
               />

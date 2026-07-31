@@ -2,9 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { receivePurchaseOrder, cancelPurchaseOrder } from "../actions/purchase-orders";
 import { PurchaseOrderFormDialog, type NewPurchaseOrder } from "./purchase-order-form-dialog";
+import { PurchaseOrderDetailDialog } from "./purchase-order-detail-dialog";
 import type { IngredientWithUnits } from "./purchase-order-items-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ export function PurchaseOrderList({
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderRow | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -135,8 +137,8 @@ export function PurchaseOrderList({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-nowrap items-center gap-3">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -215,7 +217,7 @@ export function PurchaseOrderList({
                 0,
               );
               return (
-                <TableRow key={o.id}>
+                <TableRow key={o.id} className="cursor-pointer" onClick={() => setSelectedOrder(o)}>
                   <TableCell className="text-muted-foreground">
                     {getSkip(page, DEFAULT_PAGE_SIZE) + index + 1}
                   </TableCell>
@@ -239,7 +241,7 @@ export function PurchaseOrderList({
                     </Badge>
                   </TableCell>
                   {canEdit && (
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       {o.status === "pending" && (
                         <div className="flex justify-end gap-2">
                           <Button
@@ -276,6 +278,11 @@ export function PurchaseOrderList({
         total={total}
         basePath="/purchases"
         searchParams={{ supplier: supplierFilter }}
+      />
+
+      <PurchaseOrderDetailDialog
+        order={selectedOrder}
+        onOpenChange={(open) => !open && setSelectedOrder(null)}
       />
     </div>
   );

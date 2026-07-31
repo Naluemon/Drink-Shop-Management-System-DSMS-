@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { Trash2 } from "lucide-react";
 import { addPurchaseOrderItem, removePurchaseOrderItem } from "../actions/purchase-orders";
 import { Button } from "@/components/ui/button";

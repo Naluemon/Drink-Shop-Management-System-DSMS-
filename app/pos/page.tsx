@@ -3,18 +3,20 @@ import { getProfile } from "@/features/auth/actions/profile";
 import { logout } from "@/features/auth/actions/logout";
 import { canAccessPage } from "@/lib/page-access";
 import { getRolePagePermissionMap } from "@/lib/page-access-server";
-import { hasPermission } from "@/lib/permissions";
 import { getPosMenuData } from "@/features/pos/actions/pos-menu";
 import { listRecentTransactions } from "@/features/pos/actions/void-refund";
 import { AppShell } from "@/components/app-shell";
 import { PosTerminal } from "@/features/pos/components/pos-terminal";
 import { RecentTransactionsPanel } from "@/features/pos/components/recent-transactions-panel";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { parsePageParam } from "@/lib/pagination";
 
-// Phase 8 — POS. SECURITY.md §1: only Shift Supervisor/Cashier "create"
-// pos_sale — Owner/Manager only have "view" (they see sales in Reports,
-// Phase 11, not this register screen), Employee/Accountant have no access.
-export default async function PosPage() {
+// Phase 8 — POS. SECURITY.md §1: Owner/Shift Supervisor/Cashier "create"
+// pos_sale (owner can always sell too, not just view reports); Manager only
+// has "view", Employee/Accountant have no access.
+export default async function PosPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const profile = await getProfile();
   if (profile.error || !profile.user) {
     redirect("/login");
@@ -26,42 +28,12 @@ export default async function PosPage() {
     redirect("/dashboard");
   }
 
-  // Owner passes canAccessPage() unconditionally (D19: owner can never be
-  // locked out), but the CRUD matrix in lib/permissions.ts only grants owner
-  // "view" on pos_sale — so getPosMenuData() below would deny it. Redirecting
-  // straight back to /dashboard from a nav link that renders enabled reads as
-  // a broken link, so show the same "you can open this page but not use this
-  // feature" card app/dashboard/page.tsx uses for its own no-view-permission
-  // case instead. Owner is the only role that can reach here without
-  // "create pos_sale": the seeded pos defaults are shift_supervisor/cashier
-  // (both of which do have it), and Fix 2's revoke-only rule means no other
-  // role can ever be granted "pos" beyond that seed.
-  if (!hasPermission(role, "create", "pos_sale")) {
-    return (
-      <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
-        <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">หน้าขาย (POS)</CardTitle>
-              <CardDescription>
-                หน้านี้สำหรับพนักงานที่ขายหน้าร้าน (หัวหน้ากะ/แคชเชียร์)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground text-sm">
-                ตำแหน่งของคุณเปิดหน้านี้ได้ แต่ไม่ได้รับสิทธิ์ &quot;สร้างรายการขาย&quot;
-                จึงใช้หน้าขายไม่ได้ — ดูยอดขายและรายการขายทั้งหมดได้ที่เมนู &quot;รายงาน&quot;
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </AppShell>
-    );
-  }
+  const searchParams = await props.searchParams;
+  const page = parsePageParam(searchParams?.page);
 
   const [menuResult, transactionsResult] = await Promise.all([
     getPosMenuData(),
-    listRecentTransactions(),
+    listRecentTransactions(page),
   ]);
 
   if (menuResult.error) {
@@ -87,7 +59,12 @@ export default async function PosPage() {
             <CardTitle className="text-base">รายการขายล่าสุด</CardTitle>
           </CardHeader>
           <CardContent>
-            <RecentTransactionsPanel initialTransactions={transactionsResult.transactions ?? []} />
+            <RecentTransactionsPanel
+              initialTransactions={transactionsResult.transactions ?? []}
+              page={transactionsResult.page ?? 1}
+              totalPages={transactionsResult.totalPages ?? 1}
+              total={transactionsResult.total ?? 0}
+            />
           </CardContent>
         </Card>
       </div>

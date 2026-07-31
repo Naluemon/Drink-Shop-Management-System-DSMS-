@@ -7,23 +7,23 @@
 > บาริสต้าที่ขายหน้าร้านด้วย → map เป็น Cashier, บาริสต้าที่ทำแค่เครื่องดื่มไม่แตะเงิน/ระบบ → map เป็น Employee
 > (ดู `DECISIONS.md` D14)
 
-| Module                                               | Owner          | Manager                                    | Shift Supervisor              | Cashier      | Employee | Accountant                |
-| ---------------------------------------------------- | -------------- | ------------------------------------------ | ----------------------------- | ------------ | -------- | ------------------------- |
-| Ingredient                                           | CRUD           | CRUD                                       | View                          | View         | View     | -                         |
-| Recipe                                               | CRUD           | CRUD                                       | View                          | View         | -        | -                         |
-| Menu (+ Variant/Modifier)                            | CRUD           | CRUD                                       | View                          | View         | -        | -                         |
-| Inventory — Stock In (มี PO อ้างอิง)                 | CRUD           | CRUD                                       | Create                        | -            | Create   | -                         |
-| Inventory — Stock Out (มี reason code จากลิสต์)      | CRUD           | CRUD                                       | Create                        | -            | Create   | -                         |
-| Inventory — Adjustment (แก้อิสระ ไม่มีเอกสารอ้างอิง) | CRUD           | Create                                     | -                             | -            | -        | -                         |
-| Purchase                                             | CRUD           | CRUD                                       | View                          | -            | -        | -                         |
-| POS — Create Sale                                    | View           | View                                       | Create                        | Create       | -        | -                         |
-| POS — Void (ในกะเดียวกัน)                            | CRUD           | CRUD                                       | Create                        | Create       | -        | -                         |
-| POS — Refund (หลังปิดกะ)                             | CRUD (approve) | CRUD (approve)                             | Approve (≤ threshold — ดู D5) | Request only | -        | -                         |
-| Expense                                              | CRUD           | Create/View                                | -                             | -            | -        | Create/View               |
-| User Management — Invite/Role                        | CRUD           | Invite (Shift Supervisor/Cashier/Employee) | -                             | -            | -        | -                         |
-| Dashboard                                            | View           | View                                       | View (เฉพาะกะตัวเอง)          | -            | -        | -                         |
-| Reports                                              | View (ทั้งหมด) | View (เฉพาะที่ได้รับสิทธิ์)                | View (เฉพาะกะตัวเอง)          | -            | -        | View (เฉพาะรายงานการเงิน) |
-| Settings                                             | CRUD           | -                                          | -                             | -            | -        | -                         |
+| Module                                               | Owner                   | Manager                                    | Shift Supervisor              | Cashier      | Employee | Accountant                |
+| ---------------------------------------------------- | ----------------------- | ------------------------------------------ | ----------------------------- | ------------ | -------- | ------------------------- |
+| Ingredient                                           | CRUD                    | CRUD                                       | View                          | View         | View     | -                         |
+| Recipe                                               | CRUD                    | CRUD                                       | View                          | View         | -        | -                         |
+| Menu (+ Variant/Modifier)                            | CRUD                    | CRUD                                       | View                          | View         | -        | -                         |
+| Inventory — Stock In (มี PO อ้างอิง)                 | CRUD                    | CRUD                                       | Create                        | -            | Create   | -                         |
+| Inventory — Stock Out (มี reason code จากลิสต์)      | CRUD                    | CRUD                                       | Create                        | -            | Create   | -                         |
+| Inventory — Adjustment (แก้อิสระ ไม่มีเอกสารอ้างอิง) | CRUD                    | Create                                     | -                             | -            | -        | -                         |
+| Purchase                                             | CRUD                    | CRUD                                       | View                          | -            | -        | -                         |
+| POS — Create Sale                                    | Create                  | View                                       | Create                        | Create       | -        | -                         |
+| POS — Void (ในกะเดียวกัน)                            | CRUD                    | CRUD                                       | Create                        | Create       | -        | -                         |
+| POS — Refund (หลังปิดกะ)                             | CRUD (approve, request) | CRUD (approve, request)                    | Approve (≤ threshold — ดู D5) | Request only | -        | -                         |
+| Expense                                              | CRUD                    | Create/View                                | -                             | -            | -        | Create/View               |
+| User Management — Invite/Role                        | CRUD                    | Invite (Shift Supervisor/Cashier/Employee) | -                             | -            | -        | -                         |
+| Dashboard                                            | View                    | View                                       | View (เฉพาะกะตัวเอง)          | -            | -        | -                         |
+| Reports                                              | View (ทั้งหมด)          | View (เฉพาะที่ได้รับสิทธิ์)                | View (เฉพาะกะตัวเอง)          | -            | -        | View (เฉพาะรายงานการเงิน) |
+| Settings                                             | CRUD                    | -                                          | -                             | -            | -        | -                         |
 
 matrix นี้ต้องตรงกับทั้ง Application-layer check และ RLS policy เสมอ (ดู `ARCHITECTURE.md` §2, `DECISIONS.md` D7)
 
@@ -31,6 +31,7 @@ matrix นี้ต้องตรงกับทั้ง Application-layer che
 
 - Employee **และ** Shift Supervisor ห้ามทำ "adjustment" อิสระเด็ดขาด (ช่องโหว่ปกปิดของหาย) — ทำได้เฉพาะ stock in/out ที่มีเอกสาร/reason code อ้างอิง (ดู `DECISIONS.md` D12) แม้ Shift Supervisor จะเป็นหัวหน้าเวรก็ตาม
 - Cashier "Request" refund ได้ แต่กดยืนยันเองไม่ได้ ต้องผ่าน Shift Supervisor (ถ้ายอดไม่เกิน threshold) หรือ Manager/Owner (ดู `DECISIONS.md` D5, D14)
+- Owner/Manager "Request" ได้ด้วยตัวเอง (ไม่ใช่แค่ approve) — สำหรับกรณีขายเองแล้วต้องคืนเงินรายการข้ามวันของตัวเอง โดยไม่ต้องมี Cashier คนอื่นมา request แทน (ดู `DECISIONS.md` D5 ข้อ 4)
 - Manager invite ผู้ใช้ใหม่ได้เฉพาะ role Shift Supervisor/Cashier/Employee เท่านั้น ห้าม invite เป็น Owner/Manager/**Accountant** (Accountant เป็นบุคคลภายนอกที่เห็นข้อมูลการเงิน ต้องผ่าน Owner เท่านั้น — ดู `DECISIONS.md` D14)
 - Accountant **ไม่มีสิทธิ์เข้า** POS, Inventory, Settings, User Management เด็ดขาด (least privilege เพราะมักเป็นบุคคล/สำนักงานบัญชีภายนอก)
 

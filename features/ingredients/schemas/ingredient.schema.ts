@@ -7,6 +7,16 @@ export const ingredientSchema = z.object({
   // DECISIONS.md D1 / FR-ING-05: ก่อนมี PO แรก อนุญาตกรอก cost_per_unit มือ
   costPerUnit: z.coerce.number().min(0, "ต้นทุนต้องไม่ติดลบ"),
   lowStockThreshold: z.coerce.number().min(0).optional().or(z.literal("")),
+  // "Simple" shelf-life-after-opening tracking (not full lot/batch expiry) —
+  // null/"" means this ingredient isn't tracked this way (doesn't degrade
+  // once opened). The countdown itself starts from markIngredientOpened()'s
+  // openedAt, not from here — this field only configures how many days.
+  shelfLifeDaysAfterOpening: z.coerce
+    .number()
+    .int("อายุการใช้งานต้องเป็นจำนวนเต็ม")
+    .positive("อายุการใช้งานต้องมากกว่า 0 วัน")
+    .optional()
+    .or(z.literal("")),
   supplierId: z.string().optional().or(z.literal("")),
   // Only meaningful on create — goes through recordStockIn (never a direct
   // currentStockQty write), same rule as the file-import flow. Ignored by

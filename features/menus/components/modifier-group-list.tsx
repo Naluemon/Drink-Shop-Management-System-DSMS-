@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast, confirmDelete } from "@/lib/sweet-alert";
 import { softDeleteModifierGroup } from "../actions/modifier-groups";
 import {
   ModifierGroupFormDialog,
@@ -12,7 +12,6 @@ import type { ModifierRow, IngredientOption } from "./modifier-manager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -69,7 +68,13 @@ export function ModifierGroupList({
     setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, modifiers } : g)));
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string, name: string) {
+    const confirmed = await confirmDelete({
+      title: `ลบกลุ่มตัวเลือก "${name}" ใช่ไหม?`,
+      description: "กลุ่มตัวเลือกนี้จะถูกนำออกจากรายการที่ใช้งานอยู่ กู้คืนได้ภายหลังหากจำเป็น",
+    });
+    if (!confirmed) return;
+
     setError(null);
     startTransition(async () => {
       const result = await softDeleteModifierGroup(id);
@@ -155,14 +160,14 @@ export function ModifierGroupList({
                           } satisfies ModifierGroupFormValues
                         }
                       />
-                      <ConfirmDialog
-                        trigger={<Button size="sm" variant="destructive" disabled={isPending} />}
-                        triggerLabel="ลบ"
-                        title={`ลบกลุ่มตัวเลือก "${g.name}" ใช่ไหม?`}
-                        description="กลุ่มตัวเลือกนี้จะถูกนำออกจากรายการที่ใช้งานอยู่ กู้คืนได้ภายหลังหากจำเป็น"
-                        confirmLabel="ลบ"
-                        onConfirm={() => handleDelete(g.id)}
-                      />
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={isPending}
+                        onClick={() => handleDelete(g.id, g.name)}
+                      >
+                        ลบ
+                      </Button>
                     </div>
                   </TableCell>
                 )}

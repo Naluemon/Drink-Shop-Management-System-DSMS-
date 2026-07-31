@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { Plus, Pencil } from "lucide-react";
 import { createRecipe, updateRecipe } from "../actions/recipes";
 import {
@@ -81,8 +81,8 @@ export function RecipeFormDialog({
       onSaved?.({ id, name, yield: yieldAmount });
       toast.success(mode === "create" ? "เพิ่มสูตรสำเร็จ" : "แก้ไขสูตรสำเร็จ");
 
+      setOpen(false);
       if (mode === "create") {
-        setOpen(false);
         setName("");
         setYieldAmount("1");
       }

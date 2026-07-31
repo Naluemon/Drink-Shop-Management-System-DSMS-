@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { PackagePlus } from "lucide-react";
 import { recordStockIn, recordStockOut, recordAdjustment } from "../actions/inventory";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ export interface IngredientOption {
   id: string;
   name: string;
   baseUnit: string;
+  unitConversions: { id: string; purchaseUnitName: string; conversionFactor: string }[];
 }
 
 export interface ReasonCodeOption {
@@ -43,6 +44,37 @@ interface StockMovementDialogProps {
 }
 
 const BASE_UNIT_LABELS: Record<string, string> = { gram: "กรัม", ml: "มล.", piece: "ชิ้น" };
+
+interface UnitOption {
+  // "" = the ingredient's own base unit (factor 1); anything else is a
+  // UnitConversion id from features/ingredients (e.g. "1 ถุง = 1000 กรัม").
+  key: string;
+  // Short unit name for the quantity field's label/placeholder ("กรัม", "ถุง").
+  shortLabel: string;
+  // Full "1 X = Y กรัม" explanation, shown only in the unit dropdown itself —
+  // that's the one place someone needs to double-check the conversion rate.
+  dropdownLabel: string;
+  factor: number;
+}
+
+// Recording stock in grams/ml only makes sense to someone who already knows
+// the conversion by heart — a delivery is counted in ถุง/แพ็ก/ขวด, not grams.
+// Reuses the same unit-conversion rates already configured per ingredient
+// (features/ingredients/components/unit-conversions-manager.tsx) so a
+// cashier can enter "3 ถุง" and the base-unit math happens automatically.
+function buildUnitOptions(ingredient: IngredientOption | undefined): UnitOption[] {
+  if (!ingredient) return [];
+  const baseLabel = BASE_UNIT_LABELS[ingredient.baseUnit] ?? ingredient.baseUnit;
+  return [
+    { key: "", shortLabel: baseLabel, dropdownLabel: baseLabel, factor: 1 },
+    ...ingredient.unitConversions.map((c) => ({
+      key: c.id,
+      shortLabel: c.purchaseUnitName,
+      dropdownLabel: `${c.purchaseUnitName} (1 ${c.purchaseUnitName} = ${c.conversionFactor} ${baseLabel})`,
+      factor: Number(c.conversionFactor),
+    })),
+  ];
+}
 
 // FR-INV-01/02/03: Stock In / Stock Out (reason code บังคับ) / Adjustment
 // (จำกัด Manager/Owner) — แยกเป็น 3 แท็บ เพราะ permission และฟิลด์ต่างกัน
@@ -129,13 +161,49 @@ function IngredientSelect({
     <Select value={value} onValueChange={(v) => onChange(v ?? "")}>
       <SelectTrigger className="w-full">
         <SelectValue placeholder="เลือกวัตถุดิบ">
-          {(v: string) => ingredients.find((i) => i.id === v)?.name ?? "เลือกวัตถุดิบ"}
+          {(v: string) => {
+            const selected = ingredients.find((i) => i.id === v);
+            if (!selected) return "เลือกวัตถุดิบ";
+            // Keep the unit visible on the collapsed trigger too, not just in
+            // the dropdown options — otherwise it's out of view by the time
+            // the user is typing the quantity below.
+            return `${selected.name} (${BASE_UNIT_LABELS[selected.baseUnit] ?? selected.baseUnit})`;
+          }}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {ingredients.map((i) => (
           <SelectItem key={i.id} value={i.id}>
             {i.name} ({BASE_UNIT_LABELS[i.baseUnit] ?? i.baseUnit})
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function UnitSelect({
+  options,
+  value,
+  onChange,
+}: {
+  options: UnitOption[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v ?? "")}>
+      <SelectTrigger className="w-full">
+        <SelectValue>
+          {(v: string) =>
+            options.find((u) => u.key === v)?.dropdownLabel ?? options[0]?.dropdownLabel
+          }
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((u) => (
+          <SelectItem key={u.key || "base"} value={u.key}>
+            {u.dropdownLabel}
           </SelectItem>
         ))}
       </SelectContent>
@@ -151,16 +219,26 @@ function StockInForm({
   onDone: () => void;
 }) {
   const [ingredientId, setIngredientId] = useState("");
+  const [unitKey, setUnitKey] = useState("");
   const [quantity, setQuantity] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const selectedIngredient = ingredients.find((i) => i.id === ingredientId);
+  const unitOptions = buildUnitOptions(selectedIngredient);
+  const selectedUnit = unitOptions.find((u) => u.key === unitKey) ?? unitOptions[0];
+
+  function handleIngredientChange(id: string) {
+    setIngredientId(id);
+    setUnitKey("");
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     startTransition(async () => {
-      const result = await recordStockIn({ ingredientId, quantity: Number(quantity), note });
+      const baseQuantity = Number(quantity) * (selectedUnit?.factor ?? 1);
+      const result = await recordStockIn({ ingredientId, quantity: baseQuantity, note });
       if (result?.error) {
         setError(result.error);
         return;
@@ -178,17 +256,26 @@ function StockInForm({
         <IngredientSelect
           ingredients={ingredients}
           value={ingredientId}
-          onChange={setIngredientId}
+          onChange={handleIngredientChange}
         />
       </div>
+      {unitOptions.length > 1 && (
+        <div className="space-y-1">
+          <Label className="text-xs">นับเป็นหน่วย</Label>
+          <UnitSelect options={unitOptions} value={unitKey} onChange={setUnitKey} />
+        </div>
+      )}
       <div className="space-y-1">
-        <Label className="text-xs">จำนวนที่รับเข้า</Label>
+        <Label className="text-xs">
+          จำนวนที่รับเข้า{selectedUnit && ` (${selectedUnit.shortLabel})`}
+        </Label>
         <Input
           type="number"
           step="0.0001"
           min="0"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
+          placeholder={selectedUnit ? `จำนวน${selectedUnit.shortLabel}` : undefined}
         />
       </div>
       <div className="space-y-1">
@@ -216,19 +303,29 @@ function StockOutForm({
   onDone: () => void;
 }) {
   const [ingredientId, setIngredientId] = useState("");
+  const [unitKey, setUnitKey] = useState("");
   const [quantity, setQuantity] = useState("");
   const [reasonCode, setReasonCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deficitWarning, setDeficitWarning] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const selectedIngredient = ingredients.find((i) => i.id === ingredientId);
+  const unitOptions = buildUnitOptions(selectedIngredient);
+  const selectedUnit = unitOptions.find((u) => u.key === unitKey) ?? unitOptions[0];
+
+  function handleIngredientChange(id: string) {
+    setIngredientId(id);
+    setUnitKey("");
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     startTransition(async () => {
+      const baseQuantity = Number(quantity) * (selectedUnit?.factor ?? 1);
       const result = await recordStockOut({
         ingredientId,
-        quantity: Number(quantity),
+        quantity: baseQuantity,
         reasonCode,
       });
       if (result?.error) {
@@ -266,17 +363,26 @@ function StockOutForm({
         <IngredientSelect
           ingredients={ingredients}
           value={ingredientId}
-          onChange={setIngredientId}
+          onChange={handleIngredientChange}
         />
       </div>
+      {unitOptions.length > 1 && (
+        <div className="space-y-1">
+          <Label className="text-xs">นับเป็นหน่วย</Label>
+          <UnitSelect options={unitOptions} value={unitKey} onChange={setUnitKey} />
+        </div>
+      )}
       <div className="space-y-1">
-        <Label className="text-xs">จำนวนที่จ่ายออก</Label>
+        <Label className="text-xs">
+          จำนวนที่จ่ายออก{selectedUnit && ` (${selectedUnit.shortLabel})`}
+        </Label>
         <Input
           type="number"
           step="0.0001"
           min="0"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
+          placeholder={selectedUnit ? `จำนวน${selectedUnit.shortLabel}` : undefined}
         />
       </div>
       <div className="space-y-1">
@@ -319,6 +425,7 @@ function AdjustmentForm({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const selectedUnit = ingredients.find((i) => i.id === ingredientId)?.baseUnit;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -349,12 +456,18 @@ function AdjustmentForm({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">จำนวนที่ปรับ (+/-)</Label>
+        <Label className="text-xs">
+          จำนวนที่ปรับ (+/-)
+          {selectedUnit && ` (${BASE_UNIT_LABELS[selectedUnit] ?? selectedUnit})`}
+        </Label>
         <Input
           type="number"
           step="0.0001"
           value={delta}
           onChange={(e) => setDelta(e.target.value)}
+          placeholder={
+            selectedUnit ? `จำนวน${BASE_UNIT_LABELS[selectedUnit] ?? selectedUnit}` : undefined
+          }
         />
       </div>
       <div className="space-y-1">

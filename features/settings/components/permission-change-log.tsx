@@ -25,11 +25,11 @@ export async function PermissionChangeLog({ page }: { page: number }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>เมื่อไหร่</TableHead>
-            <TableHead>ใคร</TableHead>
+            <TableHead>วันที่เปลี่ยนแปลง</TableHead>
+            <TableHead>ผู้ดำเนินการ</TableHead>
             <TableHead>ตำแหน่ง</TableHead>
-            <TableHead>หน้า</TableHead>
-            <TableHead>เปลี่ยนเป็น</TableHead>
+            <TableHead>หน้าเมนู</TableHead>
+            <TableHead>สถานะการเข้าถึง</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

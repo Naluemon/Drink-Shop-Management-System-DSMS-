@@ -320,6 +320,14 @@ model Ingredient {
   lowStockThreshold          Decimal?            @map("low_stock_threshold") @db.Decimal(12, 4)
   // DECISIONS.md D4 / FR-SET-04: null = follow CompanySettings.stockDeficitPolicy
   stockDeficitPolicyOverride StockDeficitPolicy? @map("stock_deficit_policy_override")
+  // "Simple" shelf-life-after-opening tracking (not full lot/batch expiry):
+  // null shelfLifeDaysAfterOpening = this ingredient isn't tracked this way
+  // (doesn't degrade once opened, e.g. most dry non-perishables). openedAt is
+  // set by markIngredientOpened() the day someone actually opens a fresh
+  // unit, and cleared by clearIngredientOpened() to undo a misclick or start
+  // the clock over on a newly opened unit — see FR note in ingredients.ts.
+  shelfLifeDaysAfterOpening  Int?                @map("shelf_life_days_after_opening")
+  openedAt                   DateTime?           @map("opened_at")
   supplierId                 String?             @map("supplier_id")
   deletedAt                  DateTime?           @map("deleted_at")
   createdAt                  DateTime            @default(now()) @map("created_at")

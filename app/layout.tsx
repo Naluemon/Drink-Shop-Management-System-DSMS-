@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Kanit, IBM_Plex_Sans_Thai, IBM_Plex_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
-import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 // Display face: Kanit — a geometric Thai/Latin face with real character,
@@ -45,7 +44,6 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           {children}
-          <Toaster position="top-center" richColors />
         </ThemeProvider>
       </body>
     </html>

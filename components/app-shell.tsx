@@ -8,6 +8,7 @@ import { BrandIcon } from "@/components/brand-mark";
 import { getNavItemsWithState, ROLE_LABELS } from "@/components/nav-config";
 import type { RolePagePermissionMap } from "@/lib/page-access";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { UserRole } from "@/lib/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 import {
@@ -220,6 +221,10 @@ function Sidebar({
               >
                 <User /> โปรไฟล์ของฉัน
               </DropdownMenuItem>
+              <div className="flex items-center justify-between px-2 py-1.5">
+                <span className="text-muted-foreground text-sm">ธีม</span>
+                <ThemeToggle />
+              </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"

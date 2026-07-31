@@ -1,12 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast, confirmDelete } from "@/lib/sweet-alert";
 import { softDeleteSupplier } from "../actions/suppliers";
 import { SupplierFormDialog, type SavedSupplierFields } from "./supplier-form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -60,7 +59,13 @@ export function SupplierList({ initialSuppliers, canEdit }: SupplierListProps) {
     );
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string, name: string) {
+    const confirmed = await confirmDelete({
+      title: `ลบผู้จำหน่าย "${name}" ใช่ไหม?`,
+      description: "ผู้จำหน่ายนี้จะถูกนำออกจากรายการที่ใช้งานอยู่ กู้คืนได้ภายหลังหากจำเป็น",
+    });
+    if (!confirmed) return;
+
     setError(null);
     startTransition(async () => {
       const result = await softDeleteSupplier(id);
@@ -120,14 +125,14 @@ export function SupplierList({ initialSuppliers, canEdit }: SupplierListProps) {
                         onSaved={handleUpdated}
                         initialValues={{ id: s.id, name: s.name, contactInfo: s.contactInfo ?? "" }}
                       />
-                      <ConfirmDialog
-                        trigger={<Button size="sm" variant="destructive" disabled={isPending} />}
-                        triggerLabel="ลบ"
-                        title={`ลบผู้จำหน่าย "${s.name}" ใช่ไหม?`}
-                        description="ผู้จำหน่ายนี้จะถูกนำออกจากรายการที่ใช้งานอยู่ กู้คืนได้ภายหลังหากจำเป็น"
-                        confirmLabel="ลบ"
-                        onConfirm={() => handleDelete(s.id)}
-                      />
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={isPending}
+                        onClick={() => handleDelete(s.id, s.name)}
+                      >
+                        ลบ
+                      </Button>
                     </div>
                   </TableCell>
                 )}

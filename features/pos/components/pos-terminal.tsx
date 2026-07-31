@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { LayoutGrid, Coffee, UtensilsCrossed } from "lucide-react";
 import { checkout } from "../actions/checkout";
 import { VariantModifierModal } from "./variant-modifier-modal";
 import { CartPanel, type CartLine } from "./cart-panel";
+import { PosMenuTile } from "./pos-menu-tile";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/search-input";
+import { colorForCategory } from "@/lib/category-color";
 import { formatBaht } from "@/lib/utils";
 
 export interface PosMenuVariant {
@@ -44,6 +47,10 @@ export interface PosMenu {
 }
 
 const TYPE_LABELS: Record<"food" | "drink", string> = { food: "อาหาร", drink: "เครื่องดื่ม" };
+const TYPE_ICONS: Record<"food" | "drink", typeof Coffee> = {
+  food: UtensilsCrossed,
+  drink: Coffee,
+};
 
 interface PosTerminalProps {
   menus: PosMenu[];
@@ -188,11 +195,11 @@ export function PosTerminal({ menus }: PosTerminalProps) {
       <div className="space-y-4">
         {/* Search is additive on top of FR-POS-01's tap-to-order grid, not a
             replacement — useful once the menu grows past a glance-able size. */}
-        <Input
+        <SearchInput
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="ค้นหาเมนู ชื่อ หรือหมวดหมู่..."
-          className="max-w-xs"
+          containerClassName="max-w-sm"
         />
 
         {typesPresent.length > 1 && (
@@ -200,28 +207,33 @@ export function PosTerminal({ menus }: PosTerminalProps) {
             <button
               type="button"
               onClick={() => handleTypeChange(null)}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
                 activeType === null
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted text-muted-foreground hover:bg-muted/70"
               }`}
             >
+              <LayoutGrid className="size-3.5" />
               ทุกประเภท
             </button>
-            {typesPresent.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => handleTypeChange(t)}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                  activeType === t
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {TYPE_LABELS[t]}
-              </button>
-            ))}
+            {typesPresent.map((t) => {
+              const Icon = TYPE_ICONS[t];
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => handleTypeChange(t)}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
+                    activeType === t
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  }`}
+                >
+                  <Icon className="size-3.5" />
+                  {TYPE_LABELS[t]}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -230,45 +242,44 @@ export function PosTerminal({ menus }: PosTerminalProps) {
             <button
               type="button"
               onClick={() => setActiveCategory(null)}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                 activeCategory === null
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-muted-foreground hover:border-foreground/40"
               }`}
             >
               ทั้งหมด
             </button>
-            {categories.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setActiveCategory(c)}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                  activeCategory === c
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {c}
-              </button>
-            ))}
+            {categories.map((c) => {
+              const { color } = colorForCategory(c === "อื่นๆ" ? null : c);
+              const isActive = activeCategory === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setActiveCategory(c)}
+                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all"
+                  style={
+                    isActive
+                      ? { backgroundColor: color, borderColor: color, color: "white" }
+                      : { borderColor: `color-mix(in oklab, ${color} 40%, transparent)` }
+                  }
+                >
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: isActive ? "white" : color }}
+                  />
+                  {c}
+                </button>
+              );
+            })}
           </div>
         )}
 
         {/* FR-POS-01: ปุ่มเมนูกดตรง ไม่ต้อง search ในการใช้งานปกติ — ตอนนี้เสริมด้วยช่องค้นหา/ตัวกรองประเภทด้านบน */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {visibleMenus.map((menu) => (
-            <button
-              key={menu.id}
-              type="button"
-              onClick={() => handleMenuClick(menu)}
-              className="border-border bg-card hover:border-primary/50 flex min-h-24 flex-col justify-between rounded-xl border p-3 text-left shadow-sm transition-colors active:scale-[0.98]"
-            >
-              <span className="font-medium">{menu.name}</span>
-              <span className="text-primary text-sm font-semibold">
-                {formatBaht(Number(menu.basePrice))}
-              </span>
-            </button>
+            <PosMenuTile key={menu.id} menu={menu} onClick={() => handleMenuClick(menu)} />
           ))}
           {visibleMenus.length === 0 && (
             <p className="text-muted-foreground col-span-full py-10 text-center text-sm">

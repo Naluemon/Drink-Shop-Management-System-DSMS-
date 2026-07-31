@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { CirclePlus, Paperclip, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { createExpenseEntry, extractExpenseSlipData } from "../actions/expense";
 import type { CategoryRow } from "./category-manager";
 import { Button } from "@/components/ui/button";

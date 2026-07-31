@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Paperclip } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { getExpenseSlipUrl } from "../actions/expense";
 import { CategoryManager, type CategoryRow } from "./category-manager";
 import { ExpenseEntryDialog } from "./expense-entry-dialog";
@@ -187,7 +187,7 @@ export function ExpensePageContent({
           <ExpenseEntryDialog categories={categories} onRecorded={handleChanged} />
         </CardHeader>
         <CardContent>
-          <div className="mb-3 flex flex-wrap items-center gap-3">
+          <div className="mb-3 flex flex-nowrap items-center gap-3">
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}

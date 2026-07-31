@@ -11,7 +11,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { getDashboardTrend, type TrendPoint, type DashboardRange } from "../actions/dashboard";
 import {
   Select,

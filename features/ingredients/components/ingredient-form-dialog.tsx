@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/sweet-alert";
 import { Plus, Pencil } from "lucide-react";
 import { createIngredient, updateIngredient } from "../actions/ingredients";
 import { CostCalculator } from "./cost-calculator";
@@ -37,6 +37,7 @@ export interface IngredientFormValues {
   baseUnit: string;
   costPerUnit: string;
   lowStockThreshold: string;
+  shelfLifeDaysAfterOpening: string;
   supplierId: string;
   unitConversions: UnitConversionRow[];
 }
@@ -52,6 +53,7 @@ export interface SavedIngredientFields {
   baseUnit: string;
   costPerUnit: string;
   lowStockThreshold: string;
+  shelfLifeDaysAfterOpening: string;
   supplierId: string;
 }
 
@@ -75,6 +77,9 @@ export function IngredientFormDialog({
   const [lowStockThreshold, setLowStockThreshold] = useState(
     initialValues?.lowStockThreshold ?? "",
   );
+  const [shelfLifeDaysAfterOpening, setShelfLifeDaysAfterOpening] = useState(
+    initialValues?.shelfLifeDaysAfterOpening ?? "",
+  );
   const [supplierId, setSupplierId] = useState(initialValues?.supplierId ?? "");
   const [startingStock, setStartingStock] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +94,8 @@ export function IngredientFormDialog({
         baseUnit: baseUnit as never,
         costPerUnit: Number(costPerUnit),
         lowStockThreshold: lowStockThreshold === "" ? ("" as const) : Number(lowStockThreshold),
+        shelfLifeDaysAfterOpening:
+          shelfLifeDaysAfterOpening === "" ? ("" as const) : Number(shelfLifeDaysAfterOpening),
         supplierId,
         startingStock: startingStock === "" ? ("" as const) : Number(startingStock),
       };
@@ -117,6 +124,7 @@ export function IngredientFormDialog({
         baseUnit,
         costPerUnit,
         lowStockThreshold,
+        shelfLifeDaysAfterOpening,
         supplierId,
       });
 
@@ -131,12 +139,15 @@ export function IngredientFormDialog({
 
       toast.success(mode === "create" ? "เพิ่มวัตถุดิบสำเร็จ" : "แก้ไขวัตถุดิบสำเร็จ");
 
+      // Close back to the list on success either way — only create resets the
+      // fields, since an edit dialog closing has no reason to blank them out.
+      setOpen(false);
       if (mode === "create") {
-        setOpen(false);
         setName("");
         setBaseUnit("gram");
         setCostPerUnit("0");
         setLowStockThreshold("");
+        setShelfLifeDaysAfterOpening("");
         setSupplierId("");
         setStartingStock("");
       }
@@ -212,6 +223,19 @@ export function IngredientFormDialog({
                 placeholder="ไม่บังคับ"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ing-shelf-life">อายุการใช้งานหลังเปิด (วัน)</Label>
+            <Input
+              id="ing-shelf-life"
+              type="number"
+              step="1"
+              min="1"
+              value={shelfLifeDaysAfterOpening}
+              onChange={(e) => setShelfLifeDaysAfterOpening(e.target.value)}
+              placeholder="ไม่บังคับ — ใส่เฉพาะของที่เปิดแล้วเสื่อมสภาพ เช่น ผงชง 7 วัน"
+            />
           </div>
 
           {mode === "create" && (

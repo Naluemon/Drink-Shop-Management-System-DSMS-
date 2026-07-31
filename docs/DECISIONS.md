@@ -96,6 +96,7 @@ Cost ต่อรายการขาย = `recipe_cost * variant_multiplier + 
 1. **Void ภายในกะเดียวกัน (same-shift, ก่อน settlement)**: Cashier ยกเลิกได้เอง แต่ต้องระบุเหตุผล (reason code บังคับ) — สร้าง reversal entry ทันที คืนสต็อกอัตโนมัติ
 2. **Refund หลังปิดกะ/ข้ามวัน**: ต้องผ่าน Manager หรือ Owner เท่านั้น (Cashier "ขอ" ได้แต่กดยืนยันเองไม่ได้) — สร้าง reversal entry + บันทึกผู้อนุมัติ
 3. **ปรับปรุงตาม D14**: Shift Supervisor อนุมัติ refund ได้เองถ้ายอดไม่เกิน `refund_approval_threshold` ที่ตั้งไว้ (Settings, default 500 บาท) เพื่อไม่ให้ธุรกรรมค้างตอน Manager/Owner ไม่อยู่หน้าร้าน — เกิน threshold ต้องส่งต่อ Manager/Owner เท่านั้น
+4. **ปรับปรุง (พบโดยผู้ใช้ระหว่างใช้งานจริง)**: เดิม `pos_refund` action "request" ให้เฉพาะ Cashier เท่านั้น ทำให้ Owner/Manager ที่ขายเองแล้วต้องคืนเงินรายการข้ามวันของตัวเอง ทำไม่ได้เลย (Void ก็ทำไม่ได้เพราะข้ามวันแล้ว, request ก็ทำไม่ได้เพราะไม่มีสิทธิ์, approve ก็ไม่มีอะไรให้อนุมัติ) — แก้โดยให้ Owner/Manager มีสิทธิ์ "request" เพิ่มจากที่มี "approve" อยู่แล้ว (ยืนยันกับผู้ใช้แล้ว) เพื่อให้ request รายการของตัวเองได้โดยไม่ต้องพึ่ง Cashier คนอื่น
 
 ทั้งสองกรณีเป็น **reversal entry ใหม่** ที่อ้างอิง `original_transaction_id` (ตาม Immutable Ledger, ห้าม UPDATE/DELETE ของเดิม) สต็อกที่ตัดไปคืนกลับผ่าน `inventory_movements` ประเภท `reversal` ใหม่เช่นกัน
 

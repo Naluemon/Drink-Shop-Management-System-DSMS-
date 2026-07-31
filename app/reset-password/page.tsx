@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { resetPassword } from "@/features/auth/actions/forgot-password";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandMark } from "@/components/brand-mark";
@@ -40,10 +40,9 @@ export default async function ResetPasswordPage(props: {
           <form action={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="password">รหัสผ่านใหม่</Label>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 minLength={8}
                 className="focus:ring-primary/20 focus:border-primary h-11 transition-all"
@@ -54,10 +53,9 @@ export default async function ResetPasswordPage(props: {
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">ยืนยันรหัสผ่านใหม่</Label>
-              <Input
+              <PasswordInput
                 id="confirmPassword"
                 name="confirmPassword"
-                type="password"
                 required
                 minLength={8}
                 className="focus:ring-primary/20 focus:border-primary h-11 transition-all"

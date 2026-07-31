@@ -64,6 +64,15 @@ export default async function DashboardPage() {
           yesterday={dashboardResult.yesterday}
           bestSellers={dashboardResult.bestSellers ?? []}
           lowStockItems={dashboardResult.lowStockItems ?? []}
+          ingredientOverview={
+            dashboardResult.ingredientOverview ?? {
+              totalCount: 0,
+              lowStockCount: 0,
+              totalStockValue: 0,
+            }
+          }
+          runningOutSoon={dashboardResult.runningOutSoon ?? []}
+          expiringSoon={dashboardResult.expiringSoon ?? []}
           trend={dashboardResult.trend ?? []}
         />
       </div>

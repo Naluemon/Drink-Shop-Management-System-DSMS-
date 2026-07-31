@@ -77,11 +77,11 @@ describe("isDefaultAllowed", () => {
   });
 });
 
-// app/pos/page.tsx renders an explanatory card (instead of redirecting) for a
-// role that passes canAccessPage("pos") but lacks "create pos_sale". That is
-// only safe if owner is the only such role — which holds because the seeded
-// pos defaults all have the CRUD permission, and the revoke-only rule means
-// nobody else can ever be added.
+// app/pos/page.tsx trusts that anyone who can open "pos" can also sell —
+// no separate "you can view but not use this page" fallback. That only holds
+// because every role that can ever pass canAccessPage("pos") (owner always;
+// shift_supervisor/cashier via the seeded defaults, revoke-only) also has
+// "create pos_sale".
 describe("pos page-gate vs CRUD matrix consistency", () => {
   it("every non-owner role allowed 'pos' by default also has 'create pos_sale'", () => {
     for (const role of NON_OWNER_ROLES) {
@@ -91,8 +91,8 @@ describe("pos page-gate vs CRUD matrix consistency", () => {
     }
   });
 
-  it("owner is the one role that can open 'pos' without being able to sell", () => {
+  it("owner can always open 'pos' and sell", () => {
     expect(canAccessPage("owner", "pos", emptyMap())).toBe(true);
-    expect(hasPermission("owner", "create", "pos_sale")).toBe(false);
+    expect(hasPermission("owner", "create", "pos_sale")).toBe(true);
   });
 });

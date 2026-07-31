@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2, Minus, Plus } from "lucide-react";
+import { Trash2, Minus, Plus, ShoppingCart, Banknote, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,15 +55,31 @@ export function CartPanel({
   const total = Math.max(0, subtotal - billDiscountAmount);
 
   return (
-    <aside className="border-border bg-card flex h-fit flex-col gap-4 rounded-xl border p-4 lg:sticky lg:top-4">
-      <h2 className="font-heading text-lg font-semibold">ตะกร้า</h2>
+    <aside className="border-border bg-card flex h-fit flex-col gap-4 rounded-2xl border p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <h2 className="font-heading flex items-center gap-2 text-lg font-semibold">
+          <ShoppingCart className="size-4.5" />
+          ตะกร้า
+        </h2>
+        {cart.length > 0 && (
+          <span className="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums">
+            {cart.reduce((sum, l) => sum + l.quantity, 0)} รายการ
+          </span>
+        )}
+      </div>
 
       {cart.length === 0 ? (
-        <p className="text-muted-foreground py-8 text-center text-sm">แตะเมนูเพื่อเริ่มขาย</p>
+        <div className="text-muted-foreground flex flex-col items-center gap-2 py-10 text-center text-sm">
+          <ShoppingCart className="size-8 opacity-40" />
+          แตะเมนูเพื่อเริ่มขาย
+        </div>
       ) : (
         <ul className="max-h-[45vh] space-y-3 overflow-y-auto">
           {cart.map((line) => (
-            <li key={line.key} className="border-border/60 border-b pb-3 text-sm last:border-0">
+            <li
+              key={line.key}
+              className="border-border/60 space-y-1.5 border-b border-dashed pb-3 text-sm last:border-0"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium">
@@ -85,32 +101,32 @@ export function CartPanel({
                   <Trash2 className="size-3.5" />
                 </button>
               </div>
-              <div className="mt-1.5 flex items-center justify-between">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(line.key, line.quantity - 1)}
                     disabled={line.quantity <= 1}
-                    className="border-border flex size-7 items-center justify-center rounded-md border disabled:opacity-40"
+                    className="border-border flex size-8 items-center justify-center rounded-lg border disabled:opacity-40"
                     aria-label="ลดจำนวน"
                   >
-                    <Minus className="size-3" />
+                    <Minus className="size-3.5" />
                   </button>
-                  <span className="w-6 text-center">{line.quantity}</span>
+                  <span className="w-6 text-center font-medium tabular-nums">{line.quantity}</span>
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(line.key, line.quantity + 1)}
-                    className="border-border flex size-7 items-center justify-center rounded-md border"
+                    className="border-border flex size-8 items-center justify-center rounded-lg border"
                     aria-label="เพิ่มจำนวน"
                   >
-                    <Plus className="size-3" />
+                    <Plus className="size-3.5" />
                   </button>
                 </div>
-                <span className="font-medium">
+                <span className="font-heading font-semibold tabular-nums">
                   {formatBaht(line.unitPrice * line.quantity - line.lineDiscountAmount)}
                 </span>
               </div>
-              <div className="mt-1 flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5">
                 <Label className="text-muted-foreground text-xs whitespace-nowrap">ส่วนลด</Label>
                 <Input
                   type="number"
@@ -142,7 +158,9 @@ export function CartPanel({
         </div>
         <div className="flex items-center justify-between font-medium">
           <span>ยอดรวม (โดยประมาณ)</span>
-          <span className="font-heading text-lg">{formatBaht(total)}</span>
+          <span className="font-heading text-primary text-xl font-bold tabular-nums">
+            {formatBaht(total)}
+          </span>
         </div>
       </div>
 
@@ -150,17 +168,19 @@ export function CartPanel({
         <Button
           type="button"
           variant={paymentMethod === "cash" ? "default" : "outline"}
-          className="flex-1"
+          className="flex-1 gap-1.5"
           onClick={() => onPaymentMethodChange("cash")}
         >
+          <Banknote className="size-4" />
           เงินสด
         </Button>
         <Button
           type="button"
           variant={paymentMethod === "qr" ? "default" : "outline"}
-          className="flex-1"
+          className="flex-1 gap-1.5"
           onClick={() => onPaymentMethodChange("qr")}
         >
+          <QrCode className="size-4" />
           QR
         </Button>
       </div>

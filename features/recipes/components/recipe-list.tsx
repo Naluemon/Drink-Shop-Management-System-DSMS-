@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast, confirmDelete } from "@/lib/sweet-alert";
 import { softDeleteRecipe } from "../actions/recipes";
 import { exportRecipes } from "../actions/recipe-import-export";
 import {
@@ -14,7 +14,6 @@ import type { RecipeIngredientRow, IngredientOption } from "./recipe-ingredients
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { ExportMenuButton } from "@/components/export-menu-button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -129,7 +128,13 @@ export function RecipeList({ initialRecipes, availableIngredients, canEdit }: Re
     );
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string, name: string) {
+    const confirmed = await confirmDelete({
+      title: `ลบสูตร "${name}" ใช่ไหม?`,
+      description: "สูตรนี้จะถูกนำออกจากรายการที่ใช้งานอยู่ กู้คืนได้ภายหลังหากจำเป็น",
+    });
+    if (!confirmed) return;
+
     setError(null);
     startTransition(async () => {
       const result = await softDeleteRecipe(id);
@@ -211,14 +216,14 @@ export function RecipeList({ initialRecipes, availableIngredients, canEdit }: Re
                           } satisfies RecipeFormValues
                         }
                       />
-                      <ConfirmDialog
-                        trigger={<Button size="sm" variant="destructive" disabled={isPending} />}
-                        triggerLabel="ลบ"
-                        title={`ลบสูตร "${r.name}" ใช่ไหม?`}
-                        description="สูตรนี้จะถูกนำออกจากรายการที่ใช้งานอยู่ กู้คืนได้ภายหลังหากจำเป็น"
-                        confirmLabel="ลบ"
-                        onConfirm={() => handleDelete(r.id)}
-                      />
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={isPending}
+                        onClick={() => handleDelete(r.id, r.name)}
+                      >
+                        ลบ
+                      </Button>
                     </div>
                   </TableCell>
                 )}

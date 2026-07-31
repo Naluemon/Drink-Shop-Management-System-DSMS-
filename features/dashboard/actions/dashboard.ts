@@ -64,14 +64,18 @@ async function summarizePeriod(start: Date, end: Date): Promise<PeriodSummary> {
 async function getBestSellers(start: Date, end: Date, limit = 5) {
   const transactions = await prisma.salesTransaction.findMany({
     where: { createdAt: { gte: start, lt: end } },
-    include: { items: { include: { menu: true } } },
+    include: { items: { include: { menu: { include: { category: true } } } } },
   });
 
-  const qtyByMenu = new Map<string, { name: string; qty: number }>();
+  const qtyByMenu = new Map<string, { name: string; qty: number; categoryName: string | null }>();
   for (const t of transactions) {
     const sign = t.reversalOfId ? -1 : 1;
     for (const item of t.items) {
-      const prev = qtyByMenu.get(item.menuId) ?? { name: item.menu.name, qty: 0 };
+      const prev = qtyByMenu.get(item.menuId) ?? {
+        name: item.menu.name,
+        qty: 0,
+        categoryName: item.menu.category?.name ?? null,
+      };
       prev.qty += sign * item.quantity;
       qtyByMenu.set(item.menuId, prev);
     }
@@ -265,19 +269,95 @@ export async function getDashboardTrend(range: DashboardRange) {
   return { trend };
 }
 
-async function getLowStockItems() {
-  const ingredients = await prisma.ingredient.findMany({
-    where: { deletedAt: null, lowStockThreshold: { not: null } },
-  });
+// threshold is a fixed number the owner set once; actual usage speeds up and
+// slows down (weekends, promotions, seasons), so "≤ threshold" alone can miss
+// an ingredient that will run out before anyone revisits it. Estimating from
+// real stock_out volume over a recent window gives a days-remaining figure
+// that reflects how fast it's actually being used right now.
+const CONSUMPTION_LOOKBACK_DAYS = 14;
+const RUNNING_OUT_SOON_THRESHOLD_DAYS = 7;
+// "Simple" shelf-life-after-opening tracking (lib's daysRemainingAfterOpening
+// concept, see features/ingredients/components/ingredient-list.tsx) — flags
+// an already-opened ingredient once it's within 3 days of (or past) its
+// configured shelf life, distinct from runningOutSoon's "about to sell out"
+// signal above.
+const EXPIRING_SOON_THRESHOLD_DAYS = 3;
 
-  return ingredients
-    .filter((i) => Number(i.currentStockQty) <= Number(i.lowStockThreshold))
+// "ภาพรวมวัตถุดิบ" dashboard section — one query covers both the low-stock
+// list (existing LowStockBanner) and the summary counts/value beside it, so
+// this doesn't cost a second full ingredient scan.
+async function getIngredientOverview() {
+  const ingredients = await prisma.ingredient.findMany({ where: { deletedAt: null } });
+
+  const lowStockItems = ingredients
+    .filter(
+      (i) =>
+        i.lowStockThreshold !== null && Number(i.currentStockQty) <= Number(i.lowStockThreshold),
+    )
     .map((i) => ({
       name: i.name,
       currentStockQty: i.currentStockQty.toString(),
       lowStockThreshold: i.lowStockThreshold!.toString(),
       baseUnit: i.baseUnit,
     }));
+
+  const totalStockValue = ingredients.reduce(
+    (sum, i) => sum + Number(i.currentStockQty) * Number(i.costPerUnit),
+    0,
+  );
+
+  const cutoff = new Date(Date.now() - CONSUMPTION_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const consumption = await prisma.inventoryMovement.groupBy({
+    by: ["ingredientId"],
+    where: { movementType: "stock_out", createdAt: { gte: cutoff } },
+    _sum: { quantity: true },
+  });
+  const dailyUsageByIngredient = new Map<string, number>();
+  for (const row of consumption) {
+    const total = Number(row._sum.quantity ?? 0);
+    if (total > 0) dailyUsageByIngredient.set(row.ingredientId, total / CONSUMPTION_LOOKBACK_DAYS);
+  }
+
+  const runningOutSoon = ingredients
+    .map((i) => {
+      const dailyUsage = dailyUsageByIngredient.get(i.id);
+      if (!dailyUsage) return null;
+      return {
+        name: i.name,
+        daysRemaining: Number(i.currentStockQty) / dailyUsage,
+        currentStockQty: i.currentStockQty.toString(),
+        baseUnit: i.baseUnit,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null)
+    .filter((row) => row.daysRemaining <= RUNNING_OUT_SOON_THRESHOLD_DAYS)
+    .sort((a, b) => a.daysRemaining - b.daysRemaining)
+    .slice(0, 5);
+
+  const expiringSoon = ingredients
+    .filter(
+      (i): i is typeof i & { openedAt: Date; shelfLifeDaysAfterOpening: number } =>
+        i.openedAt !== null && i.shelfLifeDaysAfterOpening !== null,
+    )
+    .map((i) => ({
+      name: i.name,
+      daysRemaining: Math.ceil(
+        (i.openedAt.getTime() + i.shelfLifeDaysAfterOpening * 24 * 60 * 60 * 1000 - Date.now()) /
+          (24 * 60 * 60 * 1000),
+      ),
+    }))
+    .filter((row) => row.daysRemaining <= EXPIRING_SOON_THRESHOLD_DAYS)
+    .sort((a, b) => a.daysRemaining - b.daysRemaining)
+    .slice(0, 5);
+
+  return {
+    totalCount: ingredients.length,
+    lowStockCount: lowStockItems.length,
+    totalStockValue,
+    lowStockItems,
+    runningOutSoon,
+    expiringSoon,
+  };
 }
 
 // FR-DASH-01/02: Today's Sales, Profit, Revenue, Best Seller, Low Stock,
@@ -308,19 +388,27 @@ export async function getDashboardData() {
     companySettings.businessDayStartHour,
   );
 
-  const [todaySummary, yesterdaySummary, bestSellers, lowStockItems, trend] = await Promise.all([
-    summarizePeriod(today.start, today.end),
-    summarizePeriod(yesterday.start, yesterday.end),
-    getBestSellers(today.start, today.end),
-    getLowStockItems(),
-    getTrendData("7d", now, companySettings.timezone, companySettings.businessDayStartHour),
-  ]);
+  const [todaySummary, yesterdaySummary, bestSellers, ingredientOverview, trend] =
+    await Promise.all([
+      summarizePeriod(today.start, today.end),
+      summarizePeriod(yesterday.start, yesterday.end),
+      getBestSellers(today.start, today.end),
+      getIngredientOverview(),
+      getTrendData("7d", now, companySettings.timezone, companySettings.businessDayStartHour),
+    ]);
 
   return {
     today: todaySummary,
     yesterday: yesterdaySummary,
     bestSellers,
-    lowStockItems,
+    lowStockItems: ingredientOverview.lowStockItems,
+    ingredientOverview: {
+      totalCount: ingredientOverview.totalCount,
+      lowStockCount: ingredientOverview.lowStockCount,
+      totalStockValue: ingredientOverview.totalStockValue,
+    },
+    runningOutSoon: ingredientOverview.runningOutSoon,
+    expiringSoon: ingredientOverview.expiringSoon,
     trend,
   };
 }

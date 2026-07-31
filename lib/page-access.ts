@@ -73,6 +73,20 @@ export const DEFAULT_ALLOWED_ROLES: Record<PageKey, UserRole[]> = {
   settings: [],
 };
 
+// The seeded defaults are the *ceiling*, not just the starting point: this
+// feature is revoke-only. An owner may turn a role's page access OFF, or turn
+// it back ON if the seed had it ON, but can never grant a role a page it
+// never had. Reason: the CRUD matrix in lib/permissions.ts is deliberately
+// untouched by this feature, so "granting" a page whose data fetch still
+// fails requirePermission() would just produce a page that opens and then
+// errors or bounces. Enforced server-side in
+// features/settings/actions/role-page-permissions.ts (the client only mirrors
+// it by disabling those checkboxes).
+export function isDefaultAllowed(role: UserRole, pageKey: PageKey): boolean {
+  if (role === "owner") return true;
+  return (DEFAULT_ALLOWED_ROLES[pageKey] as readonly UserRole[]).includes(role);
+}
+
 export function buildDefaultPermissionChanges(): {
   role: UserRole;
   pageKey: PageKey;

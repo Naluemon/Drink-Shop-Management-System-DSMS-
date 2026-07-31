@@ -8,6 +8,7 @@ import {
   PAGE_KEYS,
   NON_OWNER_ROLES,
   buildDefaultPermissionChanges,
+  isDefaultAllowed,
   type PageKey,
 } from "@/lib/page-access";
 import {
@@ -72,6 +73,23 @@ export async function updateRolePagePermissions(
 
   const result = rolePagePermissionUpdateSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
+
+  // Revoke-only ceiling (D19). The grid can turn a role's page access OFF, or
+  // back ON if the seeded default already had it ON — never ON beyond the
+  // seed. Enforced here, not just by disabling checkboxes in
+  // role-permission-grid.tsx, because a Server Action is callable directly:
+  // the client is never trusted. Rejecting the whole batch (rather than
+  // silently dropping the offending cells) keeps the owner from believing a
+  // grant landed when it did not; the real UI can never submit one.
+  const beyondDefaults = result.data.changes.filter(
+    (c) => c.allowed && !isDefaultAllowed(c.role, c.pageKey),
+  );
+  if (beyondDefaults.length > 0) {
+    return {
+      error:
+        "ระบบนี้ปรับได้เฉพาะการ 'ปิด' การเข้าถึงหน้าเท่านั้น ให้สิทธิ์เกินค่าเริ่มต้นของระบบไม่ได้ — ต้องปรับสิทธิ์การใช้งาน (CRUD permission) ในโค้ดก่อน",
+    };
+  }
 
   const existing = await prisma.rolePagePermission.findMany();
   const allowedByKey = new Map(existing.map((r) => [`${r.role}:${r.pageKey}`, r.allowed]));

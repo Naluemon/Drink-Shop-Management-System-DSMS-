@@ -7,7 +7,12 @@ import {
   resetRolePagePermissionsToDefault,
   type RolePagePermissionRow,
 } from "../actions/role-page-permissions";
-import { PAGE_KEYS, type PageKey, buildDefaultPermissionChanges } from "@/lib/page-access";
+import {
+  PAGE_KEYS,
+  type PageKey,
+  buildDefaultPermissionChanges,
+  isDefaultAllowed,
+} from "@/lib/page-access";
 import { PAGE_KEY_LABELS, ROLE_LABELS } from "@/components/nav-config";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -30,6 +35,9 @@ const EDITABLE_ROLES = [
 type EditableRole = (typeof EDITABLE_ROLES)[number];
 
 type Grid = Record<PageKey, Record<EditableRole, boolean>>;
+
+const NOT_GRANTABLE_HINT =
+  "ต้องปรับสิทธิ์การใช้งาน (CRUD permission) ก่อน — ระบบนี้ควบคุมได้แค่การปิดกั้นการเข้าถึงหน้า ไม่ใช่การให้สิทธิ์เพิ่ม";
 
 function buildGrid(rows: RolePagePermissionRow[]): Grid {
   const grid = {} as Grid;
@@ -116,6 +124,10 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
   return (
     <div className="space-y-3">
       {error && <p className="text-destructive text-sm">{error}</p>}
+      <p className="text-muted-foreground text-xs">
+        หน้าจอนี้ใช้ <strong>ปิด</strong> การเข้าถึงหน้าเมนูของแต่ละตำแหน่งได้เท่านั้น
+        ช่องที่กดไม่ได้คือตำแหน่งที่ไม่เคยมีสิทธิ์ใช้หน้านั้นมาตั้งแต่ต้น — {NOT_GRANTABLE_HINT}
+      </p>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -141,17 +153,28 @@ export function RolePermissionGrid({ initialRows }: RolePermissionGridProps) {
                     aria-label={`${ROLE_LABELS.owner} - ${PAGE_KEY_LABELS[pageKey]}`}
                   />
                 </TableCell>
-                {EDITABLE_ROLES.map((role) => (
-                  <TableCell key={role} className="text-center">
-                    <input
-                      type="checkbox"
-                      checked={grid[pageKey][role]}
-                      disabled={isPending}
-                      onChange={() => toggle(pageKey, role)}
-                      aria-label={`${ROLE_LABELS[role]} - ${PAGE_KEY_LABELS[pageKey]}`}
-                    />
-                  </TableCell>
-                ))}
+                {EDITABLE_ROLES.map((role) => {
+                  // Revoke-only (D19): a cell outside the seeded defaults is
+                  // shown but disabled — "disable, don't hide," same as the
+                  // sidebar — because granting it would need a change to the
+                  // CRUD matrix in lib/permissions.ts, which this screen
+                  // deliberately does not touch. The server rejects such a
+                  // change too; this is only the visible half.
+                  const grantable = isDefaultAllowed(role, pageKey);
+                  return (
+                    <TableCell key={role} className="text-center">
+                      <input
+                        type="checkbox"
+                        checked={grid[pageKey][role]}
+                        disabled={isPending || !grantable}
+                        onChange={() => toggle(pageKey, role)}
+                        aria-label={`${ROLE_LABELS[role]} - ${PAGE_KEY_LABELS[pageKey]}`}
+                        title={grantable ? undefined : NOT_GRANTABLE_HINT}
+                        className={grantable ? undefined : "cursor-not-allowed opacity-50"}
+                      />
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>

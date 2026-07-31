@@ -334,6 +334,8 @@ Server Action) คือด่านป้องกันจริงเพี�
 
 **Decision**: เพิ่มตาราง `role_page_permissions` ให้เจ้าของร้านกำหนดเองได้ว่าแต่ละตำแหน่ง (role) เปิดหน้าเมนูไหนได้บ้าง — คุมแค่ระดับ "เข้าหน้าได้ไหม" เท่านั้น ไม่แตะระดับการกระทำ (สร้าง/แก้/ลบ) ซึ่งยังคุมโดยตาราง `lib/permissions.ts` เดิม `owner` ไม่มีแถวในตารางนี้และเข้าได้ทุกหน้าเสมอ ไม่มีทางถูกปิดกั้นตัวเอง `/dashboard` และ `/guide` ไม่อยู่ในระบบนี้ (ดูรายละเอียดที่ `docs/superpowers/specs/2026-07-30-role-page-permissions-design.md`)
 
+**ขอบเขต: ปิดได้อย่างเดียว (revoke-only)** — เจ้าของร้าน "ปิด" การเข้าถึงหน้าที่ตำแหน่งนั้นเคยเข้าได้ตามค่าเริ่มต้นได้ และเปิดกลับคืนได้ แต่ **ให้สิทธิ์เกินค่าเริ่มต้น (seed) ไม่ได้** ค่า seed คือเพดานสูงสุด เหตุผล: feature นี้ไม่แตะ CRUD matrix ใน `lib/permissions.ts` เลย การ "ให้สิทธิ์" หน้าที่ตัว data fetch ยังติด `requirePermission()` อยู่ จะได้แค่หน้าที่เปิดแล้ว error หรือเด้งกลับ บังคับจริงฝั่ง server ที่ `updateRolePagePermissions()` (เทียบกับ `DEFAULT_ALLOWED_ROLES`) ไม่ใช่แค่ disable checkbox ฝั่ง client
+
 **Rationale**: ก่อนหน้านี้แต่ละหน้าเขียนเช็คสิทธิ์เองแบบ hardcode (`if (role === "cashier") redirect(...)`) กระจายอยู่ 13 ไฟล์ เจ้าของร้านแก้อะไรไม่ได้เลยนอกจากขอให้แก้โค้ดแล้ว deploy ใหม่ ทำให้ปรับสิทธิ์ตามการเปลี่ยนแปลงหน้างานจริงไม่ทัน
 
 **Impact**: `SECURITY.md` §1 (เพิ่มหมายเหตุว่าการเข้าหน้าเมนูตอนนี้เป็น runtime-configurable, ไม่ใช่ hardcode), Phase ใหม่ (เพิ่มหน้าเมนู 14 ต้องเพิ่มแถว default ให้ `RolePagePermission` ด้วยเสมอ มิฉะนั้นทุก role เข้าไม่ได้โดยปริยาย)
@@ -371,5 +373,6 @@ Server Action) คือด่านป้องกันจริงเพี�
 | D16 | Tax Invoice (ใบกำกับภาษีอย่างย่อ)  | DATABASE, SECURITY, REQUIREMENTS   | 8, 12       |
 | D17 | Data Retention (5 ปี)              | DEPLOYMENT, ARCHITECTURE           | 14          |
 | D18 | User Acceptance Testing (UAT)      | TESTING                            | 13          |
+| D19 | Owner-Configurable Page Access     | SECURITY, DATABASE, ARCHITECTURE   | 14          |
 
 **⚠️ รอการยืนยันจากผู้ใช้ (Hard-Stop ตาม `AGENTS.md` §2)**: D6, D7, D12, D13, D14

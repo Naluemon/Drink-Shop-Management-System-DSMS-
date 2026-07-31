@@ -20,7 +20,7 @@ Goal (per user request, 2026-07-30): every role sees the _same_ sidebar menu, wi
 - A new page-level access control layer: can a given role open a given page at all. Owner-configurable, stored in the database, changeable at runtime.
 - Uniform sidebar: all nav items always render for every role; items the current role can't access are visually disabled (greyed out, unclickable) instead of removed.
 - One shared server-side gate that every page calls, replacing each page's own hand-written role-name check — same observable behavior (redirect denied roles to `/dashboard`, confirmed against `e2e/auth-rbac.spec.ts`), but driven by the new database table instead of a hardcoded role list copy-pasted per file.
-- An owner-only settings screen: one checkbox grid (13 pages × 6 roles) to grant/restrict page access, plus a "reset to default" action.
+- An owner-only settings screen: one checkbox grid (13 pages × 6 roles) to **restrict** page access, plus a "reset to default" action. **Revoke-only** (narrowed during final review — see §9): the seed values in §7 are the ceiling, so the owner can turn a role's page access off (and back on if the seed had it on), but can never grant a role a page beyond the seed.
 - A change history (audit log) of who changed which role's access to which page, and when.
 - Seed data at migration time that reproduces today's exact access behavior, so shipping this changes nothing until the owner deliberately edits it.
 
@@ -128,6 +128,7 @@ New tab on the existing `/settings` page (owner-only, matching the page's existi
 
 - Grid: 13 rows (pages) × 6 columns (roles), checkboxes.
 - The `owner` column is checked and disabled on every row — cannot be unchecked, matching §3/§4.
+- Any (role, page) cell that is **not** allowed in the §7 seed is also rendered disabled (not hidden), with a hint that granting it needs a CRUD-matrix change first — the revoke-only rule from §2/§9. The Server Action rejects such a change independently, since a client is never trusted.
 - **Save**: diffs the grid against the currently loaded permissions, upserts only the rows that changed into `RolePagePermission`, inserts one `PermissionChangeLog` row per changed cell, all inside one transaction, then `redirect`/revalidate the settings page (no cache-tag to invalidate — §4 reads the table directly on every call).
 - **Reset to default**: restores every non-owner row to the seed values from §7 (also logged, one row per cell that actually changes).
 - Below the grid, a **change history** table: newest first, columns "เมื่อไหร่ / ใคร / role ไหน / หน้าไหน / เปิด→ปิด หรือ ปิด→เปิด", 50 rows per page with simple "load more" pagination.
@@ -151,7 +152,7 @@ New tab on the existing `/settings` page (owner-only, matching the page's existi
 
 - Granularity is page-level only, not per-action (§2).
 - `owner` is permanently locked to full access, enforced in code, not just hidden in the UI (§3, §4).
-- The owner can both grant access beyond today's defaults and restrict access below them, in either direction (§4, §6).
+- ~~The owner can both grant access beyond today's defaults and restrict access below them, in either direction (§4, §6).~~ **Narrowed at final review to revoke-only**: the owner can restrict a role below the §7 seed defaults, and re-enable anything the seed had on, but can never grant beyond them. Reason: this design deliberately never touches the CRUD matrix in `lib/permissions.ts` (§2, §4), so most "granted" pages would still have their data fetch denied by `requirePermission()` and open only to error or bounce back to `/dashboard` — the ceiling is enforced server-side in `updateRolePagePermissions()` against `DEFAULT_ALLOWED_ROLES`, with the non-grantable checkboxes disabled (not hidden) in the grid to match.
 - Disabled menu items are greyed out and unclickable, not hidden (§5).
 - Every permission change is logged with who/what/when (§3, §6).
 

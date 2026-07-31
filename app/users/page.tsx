@@ -4,15 +4,24 @@ import { listUsers } from "@/features/users/actions/manage-users";
 import { logout } from "@/features/auth/actions/logout";
 import { canAccessPage } from "@/lib/page-access";
 import { getRolePagePermissionMap } from "@/lib/page-access-server";
+import { listRolePagePermissions } from "@/features/settings/actions/role-page-permissions";
 import { AppShell } from "@/components/app-shell";
 import { InviteUserDialog } from "@/features/users/components/invite-user-dialog";
 import { UserListTable } from "@/features/users/components/user-list-table";
+import { RolePermissionGrid } from "@/features/settings/components/role-permission-grid";
+import { PermissionChangeLog } from "@/features/settings/components/permission-change-log";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { parsePageParam } from "@/lib/pagination";
 
 // Phase 2 — RBAC & User Management. FR-USR-01: full roster is Owner-only
 // (SECURITY.md §1 gives Manager "Invite" only on user_management, not "view"),
 // so a Manager visiting this page gets just the invite card, not the list.
-export default async function UsersPage() {
+// The role-page-permission grid + its change history (moved here from
+// Settings — this is where an owner actually thinks about "who can do what")
+// are likewise Owner-only, same gate as the user roster above.
+export default async function UsersPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const profile = await getProfile();
   if (profile.error || !profile.user) {
     redirect("/login");
@@ -30,7 +39,11 @@ export default async function UsersPage() {
     redirect("/dashboard");
   }
 
+  const searchParams = await props.searchParams;
+  const page = parsePageParam(searchParams?.page);
+
   const usersResult = role === "owner" ? await listUsers() : null;
+  const rolePermResult = role === "owner" ? await listRolePagePermissions() : null;
 
   return (
     <AppShell user={profile.user} logoutAction={logout} permMap={permMap}>
@@ -64,6 +77,35 @@ export default async function UsersPage() {
                   currentUserId={profile.user.id}
                 />
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {role === "owner" && rolePermResult && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">สิทธิ์การใช้งานตามตำแหน่ง</CardTitle>
+              <CardDescription>
+                เลือกได้ว่าตำแหน่งไหนเข้าหน้าเมนูไหนได้บ้าง — เจ้าของร้านเข้าได้ทุกหน้าเสมอ
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {"error" in rolePermResult ? (
+                <p className="text-destructive text-sm">{rolePermResult.error}</p>
+              ) : (
+                <RolePermissionGrid initialRows={rolePermResult.rows} />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {role === "owner" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>ประวัติการเปลี่ยนสิทธิ์</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PermissionChangeLog page={page} />
             </CardContent>
           </Card>
         )}

@@ -12,8 +12,8 @@ import { PaginationControls } from "@/components/pagination-controls";
 import { Badge } from "@/components/ui/badge";
 
 // Async Server Component (like MovementLedger) — rendered directly in
-// app/settings/page.tsx, not nested inside the "use client"
-// SettingsPageContent, since a client component can't await a server one.
+// app/users/page.tsx, not nested inside a "use client" component, since a
+// client component can't await a server one.
 export async function PermissionChangeLog({ page }: { page: number }) {
   const result = await listPermissionChangeLog(page);
   if ("error" in result) {
@@ -62,7 +62,7 @@ export async function PermissionChangeLog({ page }: { page: number }) {
         page={result.page}
         totalPages={result.totalPages}
         total={result.total}
-        basePath="/settings"
+        basePath="/users"
       />
     </div>
   );

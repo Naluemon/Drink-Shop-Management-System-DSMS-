@@ -9,16 +9,13 @@ import {
 } from "@/features/settings/actions/refund-threshold";
 import { getFullSettings } from "@/features/settings/actions/company-settings";
 import { listAllReasonCodes } from "@/features/settings/actions/reason-codes";
-import { listRolePagePermissions } from "@/features/settings/actions/role-page-permissions";
 import { AppShell } from "@/components/app-shell";
 import { SettingsPageContent } from "@/features/settings/components/settings-page-content";
-import { PermissionChangeLog } from "@/features/settings/components/permission-change-log";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToastFromSearchParams } from "@/components/toast-from-search-params";
-import { parsePageParam } from "@/lib/pagination";
 
 // Phase 12 — Settings. Owner-only per SECURITY.md §1 (settings: CRUD is
 // Owner-only, no other role has access). Refund approval threshold
@@ -38,15 +35,12 @@ export default async function SettingsPage(props: {
   const searchParams = await props.searchParams;
   const error = searchParams?.error as string | undefined;
   const message = searchParams?.message as string | undefined;
-  const page = parsePageParam(searchParams?.page);
 
-  const [thresholdResult, fullSettingsResult, reasonCodesResult, rolePermResult] =
-    await Promise.all([
-      getRefundApprovalThreshold(),
-      getFullSettings(),
-      listAllReasonCodes(),
-      listRolePagePermissions(),
-    ]);
+  const [thresholdResult, fullSettingsResult, reasonCodesResult] = await Promise.all([
+    getRefundApprovalThreshold(),
+    getFullSettings(),
+    listAllReasonCodes(),
+  ]);
 
   async function handleSubmit(formData: FormData) {
     "use server";
@@ -82,7 +76,6 @@ export default async function SettingsPage(props: {
             taxSettings={fullSettingsResult.taxSettings}
             ingredients={fullSettingsResult.ingredients}
             reasonCodes={reasonCodesResult.codes}
-            rolePagePermissionRows={"rows" in rolePermResult ? rolePermResult.rows : []}
           />
         )}
 
@@ -114,15 +107,6 @@ export default async function SettingsPage(props: {
                 <Button type="submit">บันทึก</Button>
               </form>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>ประวัติการเปลี่ยนสิทธิ์</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PermissionChangeLog page={page} />
           </CardContent>
         </Card>
       </div>

@@ -19,6 +19,9 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   recipe: "สูตร",
   recipe_ingredient: "วัตถุดิบในสูตร",
   supplier: "ผู้จำหน่าย",
+  user: "ผู้ใช้งาน",
+  purchase_order: "ใบสั่งซื้อ",
+  purchase_order_item: "รายการในใบสั่งซื้อ",
 };
 
 export default async function HistoryPage() {

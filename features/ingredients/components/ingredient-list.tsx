@@ -130,7 +130,10 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
       name: fields.name,
       baseUnit: fields.baseUnit,
       costPerUnit: fields.costPerUnit,
-      currentStockQty: existing?.currentStockQty ?? "0",
+      // On create, the dialog passes back the server-confirmed value
+      // (post starting-stock write) — falling back to "0" hardcoded here
+      // hid a real starting stock until the next full page refetch.
+      currentStockQty: fields.currentStockQty ?? existing?.currentStockQty ?? "0",
       lowStockThreshold: fields.lowStockThreshold === "" ? null : fields.lowStockThreshold,
       shelfLifeDaysAfterOpening:
         fields.shelfLifeDaysAfterOpening === "" ? null : Number(fields.shelfLifeDaysAfterOpening),
@@ -140,7 +143,7 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
       openedAt: existing?.openedAt ?? null,
       supplierId: fields.supplierId || null,
       supplierName: suppliers.find((s) => s.id === fields.supplierId)?.name ?? null,
-      unitConversions: existing?.unitConversions ?? [],
+      unitConversions: fields.unitConversions ?? existing?.unitConversions ?? [],
     };
   }
 
@@ -209,23 +212,21 @@ export function IngredientList({ initialIngredients, suppliers, canEdit }: Ingre
             onChange={(e) => setSearch(e.target.value)}
             placeholder="ค้นหาชื่อ ผู้จำหน่าย หรือต้นทุน..."
           />
-          {suppliers.length > 0 && (
-            <Select value={supplierFilter} onValueChange={(v) => setSupplierFilter(v ?? "")}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="ทุกผู้จำหน่าย">
-                  {(v: string) => suppliers.find((s) => s.id === v)?.name ?? "ทุกผู้จำหน่าย"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">ทุกผู้จำหน่าย</SelectItem>
-                {suppliers.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select value={supplierFilter} onValueChange={(v) => setSupplierFilter(v ?? "")}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="ทุกผู้จำหน่าย">
+                {(v: string) => suppliers.find((s) => s.id === v)?.name ?? "ทุกผู้จำหน่าย"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">ทุกผู้จำหน่าย</SelectItem>
+              {suppliers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {canEdit && (
           <div className="flex flex-wrap items-center gap-2">

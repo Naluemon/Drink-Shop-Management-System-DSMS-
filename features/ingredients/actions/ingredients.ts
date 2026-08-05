@@ -111,6 +111,7 @@ export async function createIngredient(input: IngredientInput) {
     result.data.startingStock === "" || result.data.startingStock === undefined
       ? 0
       : result.data.startingStock;
+  let stockInError: string | undefined;
   if (startingStock > 0) {
     const stockInResult = await recordStockIn({
       ingredientId: ingredient.id,
@@ -118,11 +119,40 @@ export async function createIngredient(input: IngredientInput) {
       note: "สต็อกเริ่มต้นตอนเพิ่มวัตถุดิบ",
     });
     if (!("success" in stockInResult)) {
-      return { success: true, ingredient, stockInError: stockInResult.error };
+      stockInError = stockInResult.error;
     }
   }
 
-  return { success: true, ingredient };
+  const unitConversionErrors: string[] = [];
+  for (const uc of result.data.unitConversions ?? []) {
+    try {
+      await prisma.unitConversion.create({
+        data: {
+          ingredientId: ingredient.id,
+          purchaseUnitName: uc.purchaseUnitName,
+          conversionFactor: uc.conversionFactor,
+        },
+      });
+    } catch {
+      unitConversionErrors.push(`เพิ่มหน่วยซื้อ "${uc.purchaseUnitName}" ไม่สำเร็จ`);
+    }
+  }
+
+  // recordStockIn / unitConversion.create above wrote directly to the DB
+  // rather than mutating the `ingredient` object from create() above — the
+  // caller (and the list page's optimistic row) needs the up-to-date
+  // currentStockQty/unitConversions, not the pre-write snapshot.
+  const finalIngredient = await prisma.ingredient.findUniqueOrThrow({
+    where: { id: ingredient.id },
+    include: { unitConversions: true },
+  });
+
+  return {
+    success: true,
+    ingredient: finalIngredient,
+    stockInError,
+    unitConversionErrors: unitConversionErrors.length > 0 ? unitConversionErrors : undefined,
+  };
 }
 
 export async function updateIngredient(id: string, input: IngredientInput) {

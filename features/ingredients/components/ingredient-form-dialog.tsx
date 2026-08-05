@@ -6,6 +6,7 @@ import { Plus, Pencil } from "lucide-react";
 import { createIngredient, updateIngredient } from "../actions/ingredients";
 import { CostCalculator } from "./cost-calculator";
 import { UnitConversionsManager, type UnitConversionRow } from "./unit-conversions-manager";
+import { UnitConversionsEditor, type PendingUnitConversion } from "./unit-conversions-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +56,11 @@ export interface SavedIngredientFields {
   lowStockThreshold: string;
   shelfLifeDaysAfterOpening: string;
   supplierId: string;
+  // Only set on create (see createIngredient's finalIngredient re-fetch) —
+  // edit never touches stock/unit conversions, so the list falls back to
+  // whatever the row already had.
+  currentStockQty?: string;
+  unitConversions?: UnitConversionRow[];
 }
 
 interface IngredientFormDialogProps {
@@ -82,6 +88,7 @@ export function IngredientFormDialog({
   );
   const [supplierId, setSupplierId] = useState(initialValues?.supplierId ?? "");
   const [startingStock, setStartingStock] = useState("");
+  const [pendingUnitConversions, setPendingUnitConversions] = useState<PendingUnitConversion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -98,9 +105,19 @@ export function IngredientFormDialog({
           shelfLifeDaysAfterOpening === "" ? ("" as const) : Number(shelfLifeDaysAfterOpening),
         supplierId,
         startingStock: startingStock === "" ? ("" as const) : Number(startingStock),
+        unitConversions:
+          mode === "create"
+            ? pendingUnitConversions.map((r) => ({
+                purchaseUnitName: r.purchaseUnitName,
+                conversionFactor: Number(r.conversionFactor),
+              }))
+            : undefined,
       };
       let id: string;
+      let currentStockQty: string | undefined;
+      let unitConversions: UnitConversionRow[] | undefined;
       let stockInError: string | undefined;
+      let unitConversionErrors: string[] | undefined;
       if (mode === "create") {
         const result = await createIngredient(input);
         if (result?.error) {
@@ -108,7 +125,14 @@ export function IngredientFormDialog({
           return;
         }
         id = result.ingredient!.id;
+        currentStockQty = result.ingredient!.currentStockQty.toString();
+        unitConversions = result.ingredient!.unitConversions.map((c) => ({
+          id: c.id,
+          purchaseUnitName: c.purchaseUnitName,
+          conversionFactor: c.conversionFactor.toString(),
+        }));
         stockInError = result.stockInError;
+        unitConversionErrors = result.unitConversionErrors;
       } else {
         const result = await updateIngredient(initialValues!.id!, input);
         if (result?.error) {
@@ -126,14 +150,19 @@ export function IngredientFormDialog({
         lowStockThreshold,
         shelfLifeDaysAfterOpening,
         supplierId,
+        currentStockQty,
+        unitConversions,
       });
 
-      if (stockInError) {
+      const partialErrors = [stockInError, ...(unitConversionErrors ?? [])].filter(
+        (m): m is string => Boolean(m),
+      );
+      if (partialErrors.length > 0) {
         // Ingredient itself was created (onSaved already fired so the list
-        // reflects it) — only the stock-in movement failed. Keep the dialog
-        // open so this doesn't get missed, matching the file-import dialog's
-        // treatment of the same failure mode.
-        setError(`เพิ่มวัตถุดิบสำเร็จ แต่บันทึกสต็อกเริ่มต้นไม่สำเร็จ: ${stockInError}`);
+        // reflects it) — only stock-in and/or unit-conversion rows failed.
+        // Keep the dialog open so this doesn't get missed, matching the
+        // file-import dialog's treatment of the same failure mode.
+        setError(`เพิ่มวัตถุดิบสำเร็จ แต่มีปัญหา: ${partialErrors.join("; ")}`);
         return;
       }
 
@@ -150,6 +179,7 @@ export function IngredientFormDialog({
         setShelfLifeDaysAfterOpening("");
         setSupplierId("");
         setStartingStock("");
+        setPendingUnitConversions([]);
       }
     });
   }
@@ -253,25 +283,29 @@ export function IngredientFormDialog({
             </div>
           )}
 
-          {suppliers.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="ing-supplier">ผู้จำหน่าย (ไม่บังคับ)</Label>
-              <Select value={supplierId} onValueChange={(v) => setSupplierId(v ?? "")}>
-                <SelectTrigger id="ing-supplier" className="w-full">
-                  <SelectValue placeholder="ไม่ระบุ">
-                    {(v: string) => suppliers.find((s) => s.id === v)?.name ?? "ไม่ระบุ"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="ing-supplier">ผู้จำหน่าย (ไม่บังคับ)</Label>
+            <Select value={supplierId} onValueChange={(v) => setSupplierId(v ?? "")}>
+              <SelectTrigger id="ing-supplier" className="w-full">
+                <SelectValue placeholder="ไม่ระบุ">
+                  {(v: string) => suppliers.find((s) => s.id === v)?.name ?? "ไม่ระบุ"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">ไม่ระบุ</SelectItem>
+                {suppliers.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {suppliers.length === 0 && (
+              <p className="text-muted-foreground text-xs">
+                ยังไม่มีผู้จำหน่ายในระบบ — เพิ่มได้ที่หน้า &quot;ผู้จำหน่าย&quot;
+              </p>
+            )}
+          </div>
 
           <CostCalculator baseUnit={baseUnit} onApply={(v) => setCostPerUnit(v.toFixed(4))} />
 
@@ -288,11 +322,17 @@ export function IngredientFormDialog({
             />
           </div>
 
-          {mode === "edit" && initialValues?.id && (
+          {mode === "edit" && initialValues?.id ? (
             <UnitConversionsManager
               ingredientId={initialValues.id}
               baseUnit={baseUnit}
               initialConversions={initialValues.unitConversions}
+            />
+          ) : (
+            <UnitConversionsEditor
+              baseUnit={baseUnit}
+              rows={pendingUnitConversions}
+              onChange={setPendingUnitConversions}
             />
           )}
 

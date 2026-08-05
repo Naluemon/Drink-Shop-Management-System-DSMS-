@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+// DECISIONS.md D2: purchase_unit -> base_unit conversion, many per ingredient
+export const unitConversionSchema = z.object({
+  purchaseUnitName: z.string().min(1, "กรุณาระบุชื่อหน่วยซื้อ"),
+  conversionFactor: z.coerce.number().positive("อัตราแปลงหน่วยต้องมากกว่า 0"),
+});
+
+export type UnitConversionInput = z.infer<typeof unitConversionSchema>;
+
 // DECISIONS.md D2: base_unit is exactly these 3 values, fixed once set
 export const ingredientSchema = z.object({
   name: z.string().min(1, "กรุณากรอกชื่อวัตถุดิบ"),
@@ -22,14 +30,11 @@ export const ingredientSchema = z.object({
   // currentStockQty write), same rule as the file-import flow. Ignored by
   // updateIngredient, which never touches stock.
   startingStock: z.coerce.number().min(0, "สต็อกเริ่มต้นต้องไม่ติดลบ").optional().or(z.literal("")),
+  // Only meaningful on create, same reasoning as startingStock — the FK on
+  // UnitConversion.ingredientId requires the ingredient to already exist, so
+  // these are validated up front but persisted after the ingredient row is
+  // created. Ignored by updateIngredient (use addUnitConversion instead).
+  unitConversions: z.array(unitConversionSchema).optional(),
 });
 
 export type IngredientInput = z.infer<typeof ingredientSchema>;
-
-// DECISIONS.md D2: purchase_unit -> base_unit conversion, many per ingredient
-export const unitConversionSchema = z.object({
-  purchaseUnitName: z.string().min(1, "กรุณาระบุชื่อหน่วยซื้อ"),
-  conversionFactor: z.coerce.number().positive("อัตราแปลงหน่วยต้องมากกว่า 0"),
-});
-
-export type UnitConversionInput = z.infer<typeof unitConversionSchema>;

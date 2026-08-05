@@ -119,6 +119,16 @@ enum ReceiptPaperWidth {
   @@map("receipt_paper_width")
 }
 
+/// docs/superpowers/specs/2026-08-06-audit-log-design.md — system-wide "who
+/// changed what" trail, generic across every audited entity type.
+enum AuditAction {
+  created
+  updated
+  deleted
+
+  @@map("audit_action")
+}
+
 // ============================================================================
 // Identity & Access — DATABASE.md §9, DECISIONS.md D6, D13, D14, D15
 // Note: RBAC is enum-based (not separate roles/permissions tables) — the
@@ -494,6 +504,30 @@ model Modifier {
   saleItemModifiers SalesTransactionItemModifier[]
 
   @@map("modifiers")
+}
+
+/// docs/superpowers/specs/2026-08-06-audit-log-design.md — generic across
+/// every audited entity type. branchId/actorId are plain scoped ids (no
+/// @relation), matching how every other model in this schema references
+/// branch/creator — see Ingredient.branchId / Ingredient.createdBy for the
+/// precedent. actorName is a denormalized snapshot on purpose: survives the
+/// user later being deleted/renamed, and avoids a join just to render the
+/// history list.
+model AuditLog {
+  id         String      @id @default(uuid())
+  branchId   String      @map("branch_id")
+  actorId    String      @map("actor_id")
+  actorName  String      @map("actor_name")
+  action     AuditAction
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id")
+  entityName String      @map("entity_name")
+  changes    Json?
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@index([branchId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
 }
 
 // ============================================================================

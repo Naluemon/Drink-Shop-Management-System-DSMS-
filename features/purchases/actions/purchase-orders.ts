@@ -6,6 +6,7 @@ import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { computeWeightedAverageCost } from "@/lib/cost-cascade";
 import { DEFAULT_PAGE_SIZE, getSkip, getTotalPages } from "@/lib/pagination";
+import { recordAuditLog, snapshotFields, diffFields } from "@/lib/audit-log";
 import {
   purchaseOrderSchema,
   PurchaseOrderInput,
@@ -120,6 +121,20 @@ export async function createPurchaseOrder(input: PurchaseOrderInput) {
     include: { supplier: true },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "purchase_order",
+    entityId: order.id,
+    entityName: `ใบสั่งซื้อ — ${order.supplier.name}`,
+    changes: snapshotFields({ supplierId: order.supplierId, status: order.status }, [
+      "supplierId",
+      "status",
+    ]),
+  });
+
   return {
     success: true,
     order: {
@@ -147,7 +162,10 @@ export async function addPurchaseOrderItem(purchaseOrderId: string, input: Purch
   const result = purchaseOrderItemSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const order = await prisma.purchaseOrder.findUnique({ where: { id: purchaseOrderId } });
+  const order = await prisma.purchaseOrder.findUnique({
+    where: { id: purchaseOrderId },
+    include: { supplier: true },
+  });
   if (!order) return { error: "ไม่พบใบสั่งซื้อ" };
   if (order.status !== "pending") return { error: "แก้ไขใบสั่งซื้อที่รับของแล้วไม่ได้" };
 
@@ -177,6 +195,24 @@ export async function addPurchaseOrderItem(purchaseOrderId: string, input: Purch
     },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: order.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "purchase_order_item",
+    entityId: item.id,
+    entityName: `ใบสั่งซื้อ — ${order.supplier.name} — ${ingredient.name}`,
+    changes: snapshotFields(
+      {
+        purchaseUnitName: item.purchaseUnitName,
+        quantity: item.quantity.toString(),
+        unitPrice: item.unitPrice.toString(),
+      },
+      ["purchaseUnitName", "quantity", "unitPrice"],
+    ),
+  });
+
   return {
     success: true,
     item: {
@@ -202,7 +238,7 @@ export async function removePurchaseOrderItem(id: string) {
 
   const item = await prisma.purchaseOrderItem.findUnique({
     where: { id },
-    include: { purchaseOrder: true },
+    include: { purchaseOrder: { include: { supplier: true } }, ingredient: true },
   });
   if (!item) return { error: "ไม่พบรายการ" };
   if (item.purchaseOrder.status !== "pending") {
@@ -210,6 +246,17 @@ export async function removePurchaseOrderItem(id: string) {
   }
 
   await prisma.purchaseOrderItem.delete({ where: { id } });
+
+  await recordAuditLog(prisma, {
+    branchId: item.purchaseOrder.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "purchase_order_item",
+    entityId: id,
+    entityName: `ใบสั่งซื้อ — ${item.purchaseOrder.supplier.name} — ${item.ingredient.name}`,
+  });
+
   return { success: true };
 }
 
@@ -283,6 +330,21 @@ export async function receivePurchaseOrder(purchaseOrderId: string) {
       where: { id: purchaseOrderId },
       data: { status: "received", receivedAt: new Date(), updatedBy: actor.id },
     });
+
+    // Only the PO's own status change is logged here — the per-ingredient
+    // stock increments already get a permanent, timestamped record via
+    // InventoryMovement above, so a second AuditLog entry per ingredient
+    // would just duplicate that existing ledger.
+    await recordAuditLog(tx, {
+      branchId: order.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "purchase_order",
+      entityId: purchaseOrderId,
+      entityName: `ใบสั่งซื้อ #${purchaseOrderId.slice(0, 8)}`,
+      changes: diffFields({ status: order.status }, { status: "received" }, ["status"]),
+    });
   });
 
   return { success: true };
@@ -305,6 +367,17 @@ export async function cancelPurchaseOrder(id: string) {
   await prisma.purchaseOrder.update({
     where: { id },
     data: { status: "cancelled", updatedBy: actor.id },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: order.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "updated",
+    entityType: "purchase_order",
+    entityId: id,
+    entityName: `ใบสั่งซื้อ #${id.slice(0, 8)}`,
+    changes: diffFields({ status: order.status }, { status: "cancelled" }, ["status"]),
   });
 
   return { success: true };

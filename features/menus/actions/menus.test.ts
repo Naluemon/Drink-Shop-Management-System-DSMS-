@@ -14,7 +14,17 @@ vi.mock("@/lib/default-branch", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
-import { updateMenuCategory, softDeleteMenuCategory } from "./menus";
+import {
+  createMenuCategory,
+  updateMenuCategory,
+  softDeleteMenuCategory,
+  createMenu,
+  updateMenu,
+  softDeleteMenu,
+  addMenuVariant,
+  removeMenuVariant,
+  setMenuModifierGroups,
+} from "./menus";
 
 const prismaMock = prisma as unknown as ReturnType<typeof mockDeep<PrismaClient>>;
 
@@ -40,10 +50,47 @@ function categoryRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function menuRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "menu-1",
+    branchId: "branch-1",
+    name: "ชาไทยเย็น",
+    recipeId: "recipe-1",
+    categoryId: null,
+    basePrice: { toString: () => "45" },
+    imageUrl: null,
+    isAvailable: true,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   mockReset(prismaMock);
   getUser.mockReset();
   getUser.mockResolvedValue({ data: { user: { id: "actor-1" } } });
+  prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+  prismaMock.auditLog.create.mockResolvedValue({} as never);
+  prismaMock.$transaction.mockImplementation(async (cb: unknown) => {
+    if (typeof cb === "function") {
+      return (cb as (tx: typeof prismaMock) => unknown)(prismaMock);
+    }
+    return Promise.all(cb as Promise<unknown>[]);
+  });
+});
+
+describe("createMenuCategory", () => {
+  it("records a created audit log entry", async () => {
+    prismaMock.menuCategory.findFirst.mockResolvedValue(null as never);
+    prismaMock.menuCategory.create.mockResolvedValue(categoryRow() as never);
+
+    await createMenuCategory({ name: "เครื่องดื่มเย็น", type: "drink" });
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "created", entityType: "menu_category" }),
+      }),
+    );
+  });
 });
 
 describe("updateMenuCategory", () => {
@@ -116,7 +163,7 @@ describe("softDeleteMenuCategory", () => {
   });
 
   it("sets deletedAt for an owner", async () => {
-    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.menuCategory.findUnique.mockResolvedValue(categoryRow() as never);
     prismaMock.menuCategory.update.mockResolvedValue({} as never);
 
     const result = await softDeleteMenuCategory("cat-1");
@@ -126,6 +173,134 @@ describe("softDeleteMenuCategory", () => {
       expect.objectContaining({
         where: { id: "cat-1" },
         data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+      }),
+    );
+  });
+
+  it("records a deleted audit log entry", async () => {
+    prismaMock.menuCategory.findUnique.mockResolvedValue(categoryRow() as never);
+    prismaMock.menuCategory.update.mockResolvedValue({} as never);
+
+    await softDeleteMenuCategory("cat-1");
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "deleted", entityType: "menu_category" }),
+      }),
+    );
+  });
+});
+
+describe("createMenu / updateMenu / softDeleteMenu audit logging", () => {
+  const menuInput = {
+    name: "ชาไทยเย็น",
+    recipeId: "recipe-1",
+    categoryId: "",
+    basePrice: 45,
+    imageUrl: "",
+    isAvailable: true,
+  };
+
+  it("createMenu records a created entry", async () => {
+    prismaMock.menu.findFirst.mockResolvedValue(null as never);
+    prismaMock.menu.create.mockResolvedValue(menuRow() as never);
+
+    await createMenu(menuInput);
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "created", entityType: "menu" }),
+      }),
+    );
+  });
+
+  it("updateMenu records an updated entry with a diff when the price changes", async () => {
+    prismaMock.menu.findUnique.mockResolvedValue(
+      menuRow({ basePrice: { toString: () => "45" } }) as never,
+    );
+    prismaMock.menu.findFirst.mockResolvedValue(null as never);
+    prismaMock.menu.update.mockResolvedValue({} as never);
+
+    await updateMenu("menu-1", { ...menuInput, basePrice: 50 });
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "updated",
+          changes: expect.arrayContaining([{ field: "basePrice", oldValue: "45", newValue: "50" }]),
+        }),
+      }),
+    );
+  });
+
+  it("softDeleteMenu records a deleted entry", async () => {
+    prismaMock.menu.findUnique.mockResolvedValue(menuRow() as never);
+    prismaMock.menu.update.mockResolvedValue({} as never);
+
+    await softDeleteMenu("menu-1");
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "deleted", entityType: "menu" }),
+      }),
+    );
+  });
+});
+
+describe("addMenuVariant / removeMenuVariant / setMenuModifierGroups audit logging", () => {
+  it("addMenuVariant records a created entry", async () => {
+    prismaMock.menu.findUnique.mockResolvedValue(menuRow() as never);
+    prismaMock.menuVariant.create.mockResolvedValue({
+      id: "var-1",
+      name: "ใหญ่",
+      recipeMultiplier: null,
+      overrideRecipeId: null,
+      priceDelta: { toString: () => "10" },
+      isDefault: false,
+    } as never);
+
+    await addMenuVariant("menu-1", {
+      name: "ใหญ่",
+      mode: "multiplier",
+      recipeMultiplier: 1.5,
+      priceDelta: 10,
+      isDefault: false,
+    });
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "created", entityType: "menu_variant" }),
+      }),
+    );
+  });
+
+  it("removeMenuVariant records a deleted entry", async () => {
+    prismaMock.menuVariant.findUnique.mockResolvedValue({
+      id: "var-1",
+      name: "ใหญ่",
+      menu: menuRow(),
+    } as never);
+    prismaMock.menuVariant.update.mockResolvedValue({} as never);
+
+    await removeMenuVariant("var-1");
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "deleted", entityType: "menu_variant" }),
+      }),
+    );
+  });
+
+  it("setMenuModifierGroups records an updated entry on the menu", async () => {
+    prismaMock.menu.findUnique.mockResolvedValue(menuRow() as never);
+    prismaMock.menuModifierGroup.deleteMany.mockResolvedValue({ count: 0 } as never);
+    prismaMock.menuModifierGroup.createMany.mockResolvedValue({ count: 1 } as never);
+
+    await setMenuModifierGroups("menu-1", ["group-1"]);
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "updated", entityType: "menu" }),
       }),
     );
   });

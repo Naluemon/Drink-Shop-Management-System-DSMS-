@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { calculateRecipeCost } from "@/lib/cost-cascade";
+import { recordAuditLog, snapshotFields, diffFields } from "@/lib/audit-log";
 import {
   menuCategorySchema,
   MenuCategoryInput,
@@ -71,6 +72,17 @@ export async function createMenuCategory(input: MenuCategoryInput) {
     },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "menu_category",
+    entityId: category.id,
+    entityName: category.name,
+    changes: snapshotFields(category, ["name", "type"]),
+  });
+
   return { success: true, category };
 }
 
@@ -105,6 +117,23 @@ export async function updateMenuCategory(id: string, input: MenuCategoryInput) {
     data: { name: result.data.name, type: result.data.type, updatedBy: actor.id },
   });
 
+  const changes = diffFields(current, { name: result.data.name, type: result.data.type }, [
+    "name",
+    "type",
+  ]);
+  if (changes.length > 0) {
+    await recordAuditLog(prisma, {
+      branchId: current.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "menu_category",
+      entityId: id,
+      entityName: result.data.name,
+      changes,
+    });
+  }
+
   return { success: true };
 }
 
@@ -121,9 +150,22 @@ export async function softDeleteMenuCategory(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบหมวดหมู่") };
   }
 
+  const current = await prisma.menuCategory.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบหมวดหมู่" };
+
   await prisma.menuCategory.update({
     where: { id },
     data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "menu_category",
+    entityId: id,
+    entityName: current.name,
   });
 
   return { success: true };
@@ -215,6 +257,23 @@ export async function createMenu(input: MenuInput) {
     },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "menu",
+    entityId: menu.id,
+    entityName: menu.name,
+    changes: snapshotFields({ ...menu, basePrice: menu.basePrice.toString() }, [
+      "name",
+      "recipeId",
+      "categoryId",
+      "basePrice",
+      "isAvailable",
+    ]),
+  });
+
   return { success: true, menu };
 }
 
@@ -257,6 +316,30 @@ export async function updateMenu(id: string, input: MenuInput) {
     },
   });
 
+  const changes = diffFields(
+    { ...current, basePrice: current.basePrice.toString() },
+    {
+      name: result.data.name,
+      recipeId: result.data.recipeId,
+      categoryId: result.data.categoryId || null,
+      basePrice: result.data.basePrice.toString(),
+      isAvailable: result.data.isAvailable,
+    },
+    ["name", "recipeId", "categoryId", "basePrice", "isAvailable"],
+  );
+  if (changes.length > 0) {
+    await recordAuditLog(prisma, {
+      branchId: current.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "menu",
+      entityId: id,
+      entityName: result.data.name,
+      changes,
+    });
+  }
+
   return { success: true };
 }
 
@@ -271,9 +354,22 @@ export async function softDeleteMenu(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบเมนู") };
   }
 
+  const current = await prisma.menu.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบเมนู" };
+
   await prisma.menu.update({
     where: { id },
     data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "menu",
+    entityId: id,
+    entityName: current.name,
   });
 
   return { success: true };
@@ -293,11 +389,14 @@ export async function addMenuVariant(menuId: string, input: MenuVariantInput) {
   const result = menuVariantSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
+  const menu = await prisma.menu.findUnique({ where: { id: menuId } });
+  if (!menu) return { error: "ไม่พบเมนู" };
+
   const variant = await prisma.$transaction(async (tx) => {
     if (result.data.isDefault) {
       await tx.menuVariant.updateMany({ where: { menuId }, data: { isDefault: false } });
     }
-    return tx.menuVariant.create({
+    const created = await tx.menuVariant.create({
       data: {
         menuId,
         name: result.data.name,
@@ -307,6 +406,21 @@ export async function addMenuVariant(menuId: string, input: MenuVariantInput) {
         isDefault: result.data.isDefault,
       },
     });
+    await recordAuditLog(tx, {
+      branchId: menu.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "created",
+      entityType: "menu_variant",
+      entityId: created.id,
+      entityName: `${menu.name} — ${created.name}`,
+      changes: snapshotFields({ ...created, priceDelta: created.priceDelta.toString() }, [
+        "name",
+        "priceDelta",
+        "isDefault",
+      ]),
+    });
+    return created;
   });
 
   return {
@@ -332,7 +446,24 @@ export async function removeMenuVariant(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขเมนู") };
   }
 
+  const current = await prisma.menuVariant.findUnique({
+    where: { id },
+    include: { menu: true },
+  });
+  if (!current) return { error: "ไม่พบตัวเลือกขนาด" };
+
   await prisma.menuVariant.update({ where: { id }, data: { deletedAt: new Date() } });
+
+  await recordAuditLog(prisma, {
+    branchId: current.menu.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "menu_variant",
+    entityId: id,
+    entityName: `${current.menu.name} — ${current.name}`,
+  });
+
   return { success: true };
 }
 
@@ -346,12 +477,31 @@ export async function setMenuModifierGroups(menuId: string, modifierGroupIds: st
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขเมนู") };
   }
 
-  await prisma.$transaction([
-    prisma.menuModifierGroup.deleteMany({ where: { menuId } }),
-    prisma.menuModifierGroup.createMany({
+  const menu = await prisma.menu.findUnique({ where: { id: menuId } });
+  if (!menu) return { error: "ไม่พบเมนู" };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.menuModifierGroup.deleteMany({ where: { menuId } });
+    await tx.menuModifierGroup.createMany({
       data: modifierGroupIds.map((modifierGroupId) => ({ menuId, modifierGroupId })),
-    }),
-  ]);
+    });
+    await recordAuditLog(tx, {
+      branchId: menu.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "menu",
+      entityId: menuId,
+      entityName: menu.name,
+      changes: [
+        {
+          field: "modifierGroupIds",
+          oldValue: null,
+          newValue: modifierGroupIds.join(", ") || null,
+        },
+      ],
+    });
+  });
 
   return { success: true };
 }

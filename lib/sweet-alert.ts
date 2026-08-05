@@ -1,10 +1,13 @@
 import Swal from "sweetalert2";
 
 // Drop-in replacement for sonner's toast API (same `toast.success/error/
-// warning(message)` call shape everywhere in the app) but rendered as a
-// centered SweetAlert2 popup instead of a corner toast — bigger icon,
-// animation, requires an explicit "ตกลง" click to dismiss, per user request.
+// warning(message)` call shape everywhere in the app), rendered with
+// SweetAlert2's built-in "toast" mode in the top-right corner — a centered
+// modal popup was tried first but sat in the way of the page underneath, so
+// this moved to a small non-blocking corner toast per user request.
 const BASE_OPTIONS = {
+  toast: true,
+  position: "top-end",
   confirmButtonText: "ตกลง",
   confirmButtonColor: "var(--primary)",
   heightAuto: false,

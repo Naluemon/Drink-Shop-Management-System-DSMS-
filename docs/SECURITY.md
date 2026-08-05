@@ -24,6 +24,7 @@
 | Dashboard                                            | View                    | View                                       | View (เฉพาะกะตัวเอง)          | -            | -        | -                         |
 | Reports                                              | View (ทั้งหมด)          | View (เฉพาะที่ได้รับสิทธิ์)                | View (เฉพาะกะตัวเอง)          | -            | -        | View (เฉพาะรายงานการเงิน) |
 | Settings                                             | CRUD                    | -                                          | -                             | -            | -        | -                         |
+| History (audit log)                                  | View                    | -                                          | -                             | -            | -        | -                         |
 
 matrix นี้ต้องตรงกับทั้ง Application-layer check และ RLS policy เสมอ (ดู `ARCHITECTURE.md` §2, `DECISIONS.md` D7)
 
@@ -74,6 +75,7 @@ matrix นี้ต้องตรงกับทั้ง Application-layer che
 - ทุกการกระทำที่กระทบเงิน/สต็อก ต้องบันทึกใน append-only ledger (ดู `DATABASE.md` §3) พร้อม `created_by`
 - Login/Logout และการเปลี่ยนสิทธิ์ผู้ใช้ ต้อง log แยกต่างหาก (audit log สำหรับ security event)
 - Void/Refund ต้องบันทึก `approved_by` แยกจาก `created_by` เสมอ เพื่อให้ตรวจสอบย้อนหลังได้ว่าใครขาย ใครอนุมัติคืน (ดู `DECISIONS.md` D5)
+- **หน้า "ประวัติการใช้งาน" (`/history`, ดู `docs/superpowers/specs/2026-08-06-audit-log-design.md`)**: บันทึกทุกการเพิ่ม/แก้ไข/ลบข้อมูลหลักในระบบ (`AuditLog` table, branch-scoped + RLS) พร้อมค่าเก่า→ค่าใหม่รายฟิลด์ Owner เท่านั้นที่ดูได้ — ไม่ผ่านตาราง `role_page_permissions` แบบปรับได้เหมือนหน้าอื่น (ตั้ง `DEFAULT_ALLOWED_ROLES.history` เป็น `[]` ถาวร เหมือน Settings) เพราะเป็นเครื่องมือตรวจสอบการกระทำของทุก role รวมถึง Manager เอง ไม่ควรให้ role ที่ถูกตรวจสอบปรับสิทธิ์การมองเห็นของตัวเองได้
 
 ## 6. Input Security
 

@@ -14,6 +14,7 @@ import {
   Receipt,
   BarChart3,
   HelpCircle,
+  History,
   type LucideIcon,
 } from "lucide-react";
 import { canAccessPage, type PageKey, type RolePagePermissionMap } from "@/lib/page-access";
@@ -83,6 +84,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/users", label: "จัดการผู้ใช้", icon: Users, pageKey: "users" },
       { href: "/settings", label: "ตั้งค่าระบบ", icon: Settings, pageKey: "settings" },
+      { href: "/history", label: "ประวัติการใช้งาน", icon: History, pageKey: "history" },
     ],
   },
   {

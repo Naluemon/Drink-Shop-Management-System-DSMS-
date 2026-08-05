@@ -115,3 +115,18 @@ describe("canInviteRole — DECISIONS.md D14 invite hierarchy / FR-RBAC-02", () 
     }
   });
 });
+
+describe("audit_log permission", () => {
+  it("only owner can view the audit log", () => {
+    expect(hasPermission("owner", "view", "audit_log")).toBe(true);
+    for (const role of [
+      "manager",
+      "shift_supervisor",
+      "cashier",
+      "employee",
+      "accountant",
+    ] as const) {
+      expect(hasPermission(role, "view", "audit_log")).toBe(false);
+    }
+  });
+});

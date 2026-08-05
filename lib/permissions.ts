@@ -24,7 +24,8 @@ export type Resource =
   | "user_management"
   | "dashboard"
   | "reports"
-  | "settings";
+  | "settings"
+  | "audit_log";
 
 const CRUD: Action[] = ["create", "view", "update", "delete"];
 
@@ -45,6 +46,7 @@ const MATRIX: Record<Resource, Partial<Record<UserRole, Action[]>>> = {
   dashboard:        { owner: ["view"], manager: ["view"], shift_supervisor: ["view"] },
   reports:          { owner: ["view"], manager: ["view"], shift_supervisor: ["view"], accountant: ["view"] },
   settings:         { owner: CRUD },
+  audit_log:        { owner: ["view"] },
 };
 
 export class PermissionError extends Error {

@@ -26,6 +26,7 @@ export const PAGE_KEYS = [
   "reports",
   "users",
   "settings",
+  "history",
 ] as const;
 
 export type PageKey = (typeof PAGE_KEYS)[number];
@@ -71,6 +72,7 @@ export const DEFAULT_ALLOWED_ROLES: Record<PageKey, UserRole[]> = {
   reports: ["manager", "shift_supervisor", "accountant"],
   users: ["manager"],
   settings: [],
+  history: [],
 };
 
 // The seeded defaults are the *ceiling*, not just the starting point: this

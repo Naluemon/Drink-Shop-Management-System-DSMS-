@@ -93,6 +93,9 @@ const EXPECTED: Record<Resource, Partial<Record<UserRole, Action[]>>> = {
   settings: {
     owner: ["create", "view", "update", "delete"],
   },
+  audit_log: {
+    owner: ["view"],
+  },
 };
 
 const ALL_ROLES: UserRole[] = [

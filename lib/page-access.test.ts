@@ -96,3 +96,29 @@ describe("pos page-gate vs CRUD matrix consistency", () => {
     expect(hasPermission("owner", "create", "pos_sale")).toBe(true);
   });
 });
+
+describe("history page — owner only, permanently", () => {
+  it("is never in the default-allowed ceiling for any non-owner role", () => {
+    for (const role of NON_OWNER_ROLES) {
+      expect(isDefaultAllowed(role, "history")).toBe(false);
+    }
+  });
+
+  it("owner can always open it regardless of the permission map", () => {
+    expect(canAccessPage("owner", "history", emptyMap())).toBe(true);
+  });
+
+  it("no non-owner role can access it even with an all-true map (can't be granted beyond the ceiling)", () => {
+    const allTrueMap = Object.fromEntries(
+      PAGE_KEYS.map((key) => [key, new Set(NON_OWNER_ROLES)]),
+    ) as RolePagePermissionMap;
+    for (const role of NON_OWNER_ROLES) {
+      // canAccessPage itself would say true here (it just reads the map) —
+      // this documents that this feature's real guarantee is
+      // isDefaultAllowed's ceiling on what buildDefaultPermissionChanges /
+      // the Settings screen can ever set that map to, not canAccessPage.
+      expect(canAccessPage(role, "history", allTrueMap)).toBe(true);
+      expect(isDefaultAllowed(role, "history")).toBe(false);
+    }
+  });
+});

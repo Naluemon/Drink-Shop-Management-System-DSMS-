@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { calculateRecipeCost } from "@/lib/cost-cascade";
+import { recordAuditLog, snapshotFields, diffFields } from "@/lib/audit-log";
 import {
   recipeSchema,
   RecipeInput,
@@ -97,6 +98,17 @@ export async function createRecipe(input: RecipeInput) {
     },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "recipe",
+    entityId: recipe.id,
+    entityName: recipe.name,
+    changes: snapshotFields({ ...recipe, yield: recipe.yield.toString() }, ["name", "yield"]),
+  });
+
   return { success: true, recipe };
 }
 
@@ -131,6 +143,24 @@ export async function updateRecipe(id: string, input: RecipeInput) {
     data: { name: result.data.name, yield: result.data.yield, updatedBy: actor.id },
   });
 
+  const changes = diffFields(
+    { ...current, yield: current.yield.toString() },
+    { name: result.data.name, yield: result.data.yield.toString() },
+    ["name", "yield"],
+  );
+  if (changes.length > 0) {
+    await recordAuditLog(prisma, {
+      branchId: current.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "recipe",
+      entityId: id,
+      entityName: result.data.name,
+      changes,
+    });
+  }
+
   return { success: true };
 }
 
@@ -145,9 +175,22 @@ export async function softDeleteRecipe(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบสูตร") };
   }
 
+  const current = await prisma.recipe.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบสูตร" };
+
   await prisma.recipe.update({
     where: { id },
     data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "recipe",
+    entityId: id,
+    entityName: current.name,
   });
 
   return { success: true };
@@ -166,6 +209,9 @@ export async function addRecipeIngredient(recipeId: string, input: RecipeIngredi
   const result = recipeIngredientSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
+  const recipe = await prisma.recipe.findUnique({ where: { id: recipeId } });
+  if (!recipe) return { error: "ไม่พบสูตร" };
+
   const ingredient = await prisma.ingredient.findUnique({
     where: { id: result.data.ingredientId },
   });
@@ -177,6 +223,20 @@ export async function addRecipeIngredient(recipeId: string, input: RecipeIngredi
       ingredientId: result.data.ingredientId,
       quantity: result.data.quantity,
     },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: recipe.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "recipe_ingredient",
+    entityId: recipeIngredient.id,
+    entityName: `${recipe.name} — ${ingredient.name}`,
+    changes: snapshotFields(
+      { ingredientName: ingredient.name, quantity: recipeIngredient.quantity.toString() },
+      ["ingredientName", "quantity"],
+    ),
   });
 
   return {
@@ -201,7 +261,24 @@ export async function removeRecipeIngredient(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขสูตร") };
   }
 
+  const current = await prisma.recipeIngredient.findUnique({
+    where: { id },
+    include: { recipe: true, ingredient: true },
+  });
+  if (!current) return { error: "ไม่พบรายการวัตถุดิบในสูตร" };
+
   await prisma.recipeIngredient.delete({ where: { id } });
+
+  await recordAuditLog(prisma, {
+    branchId: current.recipe.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "recipe_ingredient",
+    entityId: id,
+    entityName: `${current.recipe.name} — ${current.ingredient.name}`,
+  });
+
   return { success: true };
 }
 

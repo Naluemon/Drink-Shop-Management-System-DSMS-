@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
+import { recordAuditLog, snapshotFields, diffFields } from "@/lib/audit-log";
 import { supplierSchema, SupplierInput } from "../schemas/supplier.schema";
 
 async function getActor() {
@@ -73,6 +74,17 @@ export async function createSupplier(input: SupplierInput) {
     },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "supplier",
+    entityId: supplier.id,
+    entityName: supplier.name,
+    changes: snapshotFields(supplier, ["name", "contactInfo"]),
+  });
+
   return { success: true, supplier };
 }
 
@@ -111,6 +123,24 @@ export async function updateSupplier(id: string, input: SupplierInput) {
     },
   });
 
+  const changes = diffFields(
+    current,
+    { name: result.data.name, contactInfo: result.data.contactInfo || null },
+    ["name", "contactInfo"],
+  );
+  if (changes.length > 0) {
+    await recordAuditLog(prisma, {
+      branchId: current.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "supplier",
+      entityId: id,
+      entityName: result.data.name,
+      changes,
+    });
+  }
+
   return { success: true };
 }
 
@@ -124,9 +154,22 @@ export async function softDeleteSupplier(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบผู้จำหน่าย") };
   }
 
+  const current = await prisma.supplier.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบผู้จำหน่าย" };
+
   await prisma.supplier.update({
     where: { id },
     data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "supplier",
+    entityId: id,
+    entityName: current.name,
   });
 
   return { success: true };

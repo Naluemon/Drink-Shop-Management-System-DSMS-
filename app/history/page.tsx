@@ -22,6 +22,10 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   user: "ผู้ใช้งาน",
   purchase_order: "ใบสั่งซื้อ",
   purchase_order_item: "รายการในใบสั่งซื้อ",
+  expense_category: "หมวดหมู่ค่าใช้จ่าย",
+  company_settings: "ตั้งค่าระบบ",
+  tax_settings: "ตั้งค่าภาษี/คืนเงิน",
+  reason_code: "รหัสเหตุผล",
 };
 
 export default async function HistoryPage() {

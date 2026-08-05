@@ -85,7 +85,11 @@ export default async function MenusPage() {
           <CardContent>
             <MenusPageContent
               initialMenus={menus}
-              initialCategories={categoriesResult.categories ?? []}
+              initialCategories={(categoriesResult.categories ?? []).map((c) => ({
+                id: c.id,
+                name: c.name,
+                type: c.type,
+              }))}
               availableRecipes={availableRecipes}
               availableModifierGroups={availableModifierGroups}
               canEdit={canEdit}

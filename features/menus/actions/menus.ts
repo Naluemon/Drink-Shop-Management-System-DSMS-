@@ -74,6 +74,61 @@ export async function createMenuCategory(input: MenuCategoryInput) {
   return { success: true, category };
 }
 
+export async function updateMenuCategory(id: string, input: MenuCategoryInput) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "update", "menu");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขหมวดหมู่") };
+  }
+
+  const result = menuCategorySchema.safeParse(input);
+  if (!result.success) return { error: result.error.issues[0].message };
+
+  const current = await prisma.menuCategory.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบหมวดหมู่" };
+
+  const existingCategory = await prisma.menuCategory.findFirst({
+    where: {
+      branchId: current.branchId,
+      deletedAt: null,
+      id: { not: id },
+      name: { equals: result.data.name, mode: "insensitive" },
+    },
+  });
+  if (existingCategory) return { error: "มีหมวดหมู่ชื่อนี้อยู่แล้ว" };
+
+  await prisma.menuCategory.update({
+    where: { id },
+    data: { name: result.data.name, type: result.data.type, updatedBy: actor.id },
+  });
+
+  return { success: true };
+}
+
+// Soft-delete only (same reasoning as softDeleteMenu) — menus keep pointing
+// at the deleted category's id, they just stop offering it going forward
+// (Menu.categoryId is nullable, so nothing breaks for menus already using it).
+export async function softDeleteMenuCategory(id: string) {
+  const actor = await getActor();
+  if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  try {
+    requirePermission(actor.role, "delete", "menu");
+  } catch (e) {
+    return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบหมวดหมู่") };
+  }
+
+  await prisma.menuCategory.update({
+    where: { id },
+    data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  return { success: true };
+}
+
 // FR-MENU-01/02: list พร้อมต้นทุน recipe หลักคำนวณสด (ARCHITECTURE.md §3)
 export async function listMenus() {
   const actor = await getActor();

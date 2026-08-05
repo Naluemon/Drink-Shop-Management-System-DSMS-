@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateCompanySettings, getOrCreateTaxSettings } from "@/lib/settings";
+import { getOrCreateDefaultBranch } from "@/lib/default-branch";
+import { recordAuditLog, diffFields } from "@/lib/audit-log";
 import {
   companyInfoSchema,
   CompanyInfoInput,
@@ -126,16 +128,35 @@ export async function updateCompanyInfo(input: CompanyInfoInput): Promise<Settin
   if (!result.success) return { error: result.error.issues[0].message };
 
   const settings = await getOrCreateCompanySettings();
-  await prisma.companySettings.update({
-    where: { id: settings.id },
-    data: {
-      registeredName: result.data.registeredName || null,
-      registeredAddress: result.data.registeredAddress || null,
-      companyPhone: result.data.companyPhone || null,
-      isVatRegistered: result.data.isVatRegistered,
-      taxId: result.data.taxId || null,
-    },
-  });
+  const nextData = {
+    registeredName: result.data.registeredName || null,
+    registeredAddress: result.data.registeredAddress || null,
+    companyPhone: result.data.companyPhone || null,
+    isVatRegistered: result.data.isVatRegistered,
+    taxId: result.data.taxId || null,
+  };
+  await prisma.companySettings.update({ where: { id: settings.id }, data: nextData });
+
+  const changes = diffFields(settings, nextData, [
+    "registeredName",
+    "registeredAddress",
+    "companyPhone",
+    "isVatRegistered",
+    "taxId",
+  ]);
+  if (changes.length > 0) {
+    const branch = await getOrCreateDefaultBranch(access.actor.organizationId);
+    await recordAuditLog(prisma, {
+      branchId: branch.id,
+      actorId: access.actor.id,
+      actorName: access.actor.fullName,
+      action: "updated",
+      entityType: "company_settings",
+      entityId: settings.id,
+      entityName: "ข้อมูลบริษัท",
+      changes,
+    });
+  }
 
   return { success: true };
 }
@@ -153,6 +174,25 @@ export async function updateTaxSettings(input: TaxSettingsInput): Promise<Settin
     data: { vatMode: result.data.vatMode, vatRate: result.data.vatRate },
   });
 
+  const changes = diffFields(
+    { ...settings, vatRate: settings.vatRate.toString() },
+    { vatMode: result.data.vatMode, vatRate: result.data.vatRate.toString() },
+    ["vatMode", "vatRate"],
+  );
+  if (changes.length > 0) {
+    const branch = await getOrCreateDefaultBranch(access.actor.organizationId);
+    await recordAuditLog(prisma, {
+      branchId: branch.id,
+      actorId: access.actor.id,
+      actorName: access.actor.fullName,
+      action: "updated",
+      entityType: "tax_settings",
+      entityId: settings.id,
+      entityName: "การตั้งค่าภาษี",
+      changes,
+    });
+  }
+
   return { success: true };
 }
 
@@ -166,13 +206,26 @@ export async function updateReceiptSettings(
   if (!result.success) return { error: result.error.issues[0].message };
 
   const settings = await getOrCreateCompanySettings();
-  await prisma.companySettings.update({
-    where: { id: settings.id },
-    data: {
-      receiptFooterMessage: result.data.receiptFooterMessage || null,
-      receiptPaperWidth: result.data.receiptPaperWidth,
-    },
-  });
+  const nextData = {
+    receiptFooterMessage: result.data.receiptFooterMessage || null,
+    receiptPaperWidth: result.data.receiptPaperWidth,
+  };
+  await prisma.companySettings.update({ where: { id: settings.id }, data: nextData });
+
+  const changes = diffFields(settings, nextData, ["receiptFooterMessage", "receiptPaperWidth"]);
+  if (changes.length > 0) {
+    const branch = await getOrCreateDefaultBranch(access.actor.organizationId);
+    await recordAuditLog(prisma, {
+      branchId: branch.id,
+      actorId: access.actor.id,
+      actorName: access.actor.fullName,
+      action: "updated",
+      entityType: "company_settings",
+      entityId: settings.id,
+      entityName: "การตั้งค่าใบเสร็จ",
+      changes,
+    });
+  }
 
   return { success: true };
 }
@@ -187,15 +240,33 @@ export async function updateBusinessHours(
   if (!result.success) return { error: result.error.issues[0].message };
 
   const settings = await getOrCreateCompanySettings();
-  await prisma.companySettings.update({
-    where: { id: settings.id },
-    data: {
-      openTime: result.data.openTime || null,
-      closeTime: result.data.closeTime || null,
-      timezone: result.data.timezone,
-      businessDayStartHour: result.data.businessDayStartHour,
-    },
-  });
+  const nextData = {
+    openTime: result.data.openTime || null,
+    closeTime: result.data.closeTime || null,
+    timezone: result.data.timezone,
+    businessDayStartHour: result.data.businessDayStartHour,
+  };
+  await prisma.companySettings.update({ where: { id: settings.id }, data: nextData });
+
+  const changes = diffFields(settings, nextData, [
+    "openTime",
+    "closeTime",
+    "timezone",
+    "businessDayStartHour",
+  ]);
+  if (changes.length > 0) {
+    const branch = await getOrCreateDefaultBranch(access.actor.organizationId);
+    await recordAuditLog(prisma, {
+      branchId: branch.id,
+      actorId: access.actor.id,
+      actorName: access.actor.fullName,
+      action: "updated",
+      entityType: "company_settings",
+      entityId: settings.id,
+      entityName: "เวลาทำการ",
+      changes,
+    });
+  }
 
   return { success: true };
 }
@@ -215,6 +286,23 @@ export async function updateStockDeficitPolicy(
     data: { stockDeficitPolicy: result.data.stockDeficitPolicy },
   });
 
+  const changes = diffFields(settings, { stockDeficitPolicy: result.data.stockDeficitPolicy }, [
+    "stockDeficitPolicy",
+  ]);
+  if (changes.length > 0) {
+    const branch = await getOrCreateDefaultBranch(access.actor.organizationId);
+    await recordAuditLog(prisma, {
+      branchId: branch.id,
+      actorId: access.actor.id,
+      actorName: access.actor.fullName,
+      action: "updated",
+      entityType: "company_settings",
+      entityId: settings.id,
+      entityName: "นโยบายสต็อกขาด",
+      changes,
+    });
+  }
+
   return { success: true };
 }
 
@@ -227,12 +315,32 @@ export async function updateIngredientDeficitOverride(
   const result = ingredientDeficitOverrideSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
+  const current = await prisma.ingredient.findUnique({ where: { id: result.data.ingredientId } });
+  if (!current) return { error: "ไม่พบวัตถุดิบ" };
+
+  const nextOverride = result.data.override === "default" ? null : result.data.override;
   await prisma.ingredient.update({
     where: { id: result.data.ingredientId },
-    data: {
-      stockDeficitPolicyOverride: result.data.override === "default" ? null : result.data.override,
-    },
+    data: { stockDeficitPolicyOverride: nextOverride },
   });
+
+  const changes = diffFields(
+    { stockDeficitPolicyOverride: current.stockDeficitPolicyOverride },
+    { stockDeficitPolicyOverride: nextOverride },
+    ["stockDeficitPolicyOverride"],
+  );
+  if (changes.length > 0) {
+    await recordAuditLog(prisma, {
+      branchId: current.branchId,
+      actorId: access.actor.id,
+      actorName: access.actor.fullName,
+      action: "updated",
+      entityType: "ingredient",
+      entityId: current.id,
+      entityName: current.name,
+      changes,
+    });
+  }
 
   return { success: true };
 }

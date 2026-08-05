@@ -7,6 +7,7 @@ import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { uploadExpenseSlip, getExpenseSlipSignedUrl } from "@/lib/expense-slip-storage";
 import { extractSlipData } from "@/lib/expense-slip-ocr";
 import { DEFAULT_PAGE_SIZE, getSkip, getTotalPages } from "@/lib/pagination";
+import { recordAuditLog, snapshotFields, diffFields } from "@/lib/audit-log";
 import {
   expenseCategorySchema,
   ExpenseCategoryInput,
@@ -81,6 +82,17 @@ export async function createExpenseCategory(input: ExpenseCategoryInput) {
     },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "expense_category",
+    entityId: category.id,
+    entityName: category.name,
+    changes: snapshotFields(category, ["name"]),
+  });
+
   return { success: true, category };
 }
 
@@ -117,6 +129,20 @@ export async function updateExpenseCategory(id: string, input: ExpenseCategoryIn
     data: { name: result.data.name, updatedBy: actor.id },
   });
 
+  const changes = diffFields(current, { name: result.data.name }, ["name"]);
+  if (changes.length > 0) {
+    await recordAuditLog(prisma, {
+      branchId: current.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "expense_category",
+      entityId: id,
+      entityName: result.data.name,
+      changes,
+    });
+  }
+
   return { success: true };
 }
 
@@ -130,9 +156,22 @@ export async function softDeleteExpenseCategory(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบหมวดหมู่ค่าใช้จ่าย") };
   }
 
+  const current = await prisma.expenseCategory.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบหมวดหมู่ค่าใช้จ่าย" };
+
   await prisma.expenseCategory.update({
     where: { id },
     data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "expense_category",
+    entityId: id,
+    entityName: current.name,
   });
 
   return { success: true };

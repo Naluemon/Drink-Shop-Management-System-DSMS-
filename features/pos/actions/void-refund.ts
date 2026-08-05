@@ -6,6 +6,7 @@ import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateCompanySettings, getOrCreateTaxSettings } from "@/lib/settings";
 import { isInBusinessDay } from "@/lib/business-day";
 import { DEFAULT_PAGE_SIZE, getSkip, getTotalPages } from "@/lib/pagination";
+import { recordAuditLog, diffFields } from "@/lib/audit-log";
 import { voidSchema, refundRequestSchema } from "../schemas/pos.schema";
 
 async function getActor() {
@@ -151,7 +152,19 @@ export async function voidTransaction(id: string, reason: string) {
     };
   }
 
-  await createReversal(id, actor.id, { voidReason: result.data.reason });
+  const reversal = await createReversal(id, actor.id, { voidReason: result.data.reason });
+
+  await recordAuditLog(prisma, {
+    branchId: transaction.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "sale_void",
+    entityId: reversal.id,
+    entityName: `ยกเลิกบิล #${id.slice(0, 8)}`,
+    changes: [{ field: "reason", oldValue: null, newValue: result.data.reason }],
+  });
+
   return { success: true };
 }
 
@@ -186,8 +199,19 @@ export async function requestRefund(salesTransactionId: string, reason: string) 
   });
   if (existingRequest) return { error: "มีคำขอคืนเงินสำหรับรายการนี้ค้างอยู่แล้ว" };
 
-  await prisma.refundRequest.create({
+  const request = await prisma.refundRequest.create({
     data: { salesTransactionId, requestedBy: actor.id, reason: result.data.reason },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: transaction.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "refund_request",
+    entityId: request.id,
+    entityName: `ขอคืนเงินบิล #${salesTransactionId.slice(0, 8)}`,
+    changes: [{ field: "reason", oldValue: null, newValue: result.data.reason }],
   });
 
   return { success: true };
@@ -268,6 +292,17 @@ export async function approveRefund(requestId: string) {
     data: { status: "approved", decidedBy: actor.id, decidedAt: new Date() },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: request.salesTransaction.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "updated",
+    entityType: "refund_request",
+    entityId: requestId,
+    entityName: `คืนเงินบิล #${request.salesTransactionId.slice(0, 8)}`,
+    changes: diffFields({ status: request.status }, { status: "approved" }, ["status"]),
+  });
+
   return { success: true };
 }
 
@@ -282,13 +317,27 @@ export async function rejectRefund(requestId: string) {
     throw e;
   }
 
-  const request = await prisma.refundRequest.findUnique({ where: { id: requestId } });
+  const request = await prisma.refundRequest.findUnique({
+    where: { id: requestId },
+    include: { salesTransaction: true },
+  });
   if (!request) return { error: "ไม่พบคำขอคืนเงิน" };
   if (request.status !== "pending") return { error: "คำขอนี้ถูกดำเนินการไปแล้ว" };
 
   await prisma.refundRequest.update({
     where: { id: requestId },
     data: { status: "rejected", decidedBy: actor.id, decidedAt: new Date() },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: request.salesTransaction.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "updated",
+    entityType: "refund_request",
+    entityId: requestId,
+    entityName: `คืนเงินบิล #${request.salesTransactionId.slice(0, 8)}`,
+    changes: diffFields({ status: request.status }, { status: "rejected" }, ["status"]),
   });
 
   return { success: true };

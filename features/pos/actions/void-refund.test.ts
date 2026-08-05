@@ -28,6 +28,7 @@ vi.mock("@/lib/settings", () => ({
 import { prisma } from "@/lib/prisma";
 import {
   voidTransaction,
+  requestRefund,
   approveRefund,
   rejectRefund,
   listRecentTransactions,
@@ -153,6 +154,7 @@ describe("voidTransaction (TC-VOID-01)", () => {
   beforeEach(() => {
     mockReset(prismaMock);
     getUser.mockReset();
+    prismaMock.auditLog.create.mockResolvedValue({} as never);
   });
 
   it("lets the cashier who made the sale void it within the same business day, restoring every ingredient consumed", async () => {
@@ -199,6 +201,12 @@ describe("voidTransaction (TC-VOID-01)", () => {
       (c) => c[0].where.id === "ing-pearl",
     );
     expect(pearlRestore?.[0].data).toEqual({ currentStockQty: { increment: 30 } });
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "created", entityType: "sale_void" }),
+      }),
+    );
   });
 
   it("refuses to let a Cashier void someone else's sale", async () => {
@@ -244,10 +252,39 @@ describe("voidTransaction (TC-VOID-01)", () => {
   });
 });
 
+describe("requestRefund", () => {
+  beforeEach(() => {
+    mockReset(prismaMock);
+    getUser.mockReset();
+    prismaMock.auditLog.create.mockResolvedValue({} as never);
+  });
+
+  it("records a created audit log entry for the refund request", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "cashier-1" } } });
+    prismaMock.user.findUnique.mockResolvedValue(
+      actorRow({ id: "cashier-1", role: "cashier" }) as never,
+    );
+    prismaMock.salesTransaction.findUnique.mockResolvedValue(originalSale as never);
+    prismaMock.salesTransaction.findFirst.mockResolvedValue(null);
+    prismaMock.refundRequest.findFirst.mockResolvedValue(null);
+    prismaMock.refundRequest.create.mockResolvedValue({ id: "req-1" } as never);
+
+    const result = await requestRefund("sale-1", "ลูกค้าขอคืนเงิน");
+
+    expect(result.success).toBe(true);
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "created", entityType: "refund_request" }),
+      }),
+    );
+  });
+});
+
 describe("approveRefund (TC-REFUND-01 / TC-REFUND-02, D5/D14)", () => {
   beforeEach(() => {
     mockReset(prismaMock);
     getUser.mockReset();
+    prismaMock.auditLog.create.mockResolvedValue({} as never);
   });
 
   it("TC-REFUND-01: Shift Supervisor approves a refund at/under the 500.00 threshold immediately", async () => {
@@ -274,6 +311,15 @@ describe("approveRefund (TC-REFUND-01 / TC-REFUND-02, D5/D14)", () => {
       expect.objectContaining({
         where: { id: "req-1" },
         data: expect.objectContaining({ status: "approved" }),
+      }),
+    );
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "updated",
+          entityType: "refund_request",
+          changes: [{ field: "status", oldValue: "pending", newValue: "approved" }],
+        }),
       }),
     );
   });
@@ -338,6 +384,7 @@ describe("rejectRefund", () => {
   beforeEach(() => {
     mockReset(prismaMock);
     getUser.mockReset();
+    prismaMock.auditLog.create.mockResolvedValue({} as never);
   });
 
   it("marks a pending request as rejected without creating any reversal", async () => {
@@ -348,6 +395,8 @@ describe("rejectRefund", () => {
     prismaMock.refundRequest.findUnique.mockResolvedValue({
       id: "req-1",
       status: "pending",
+      salesTransactionId: "sale-1",
+      salesTransaction: originalSale,
     } as never);
     prismaMock.refundRequest.update.mockResolvedValue({} as never);
 
@@ -358,6 +407,15 @@ describe("rejectRefund", () => {
       expect.objectContaining({ data: expect.objectContaining({ status: "rejected" }) }),
     );
     expect(prismaMock.salesTransaction.create).not.toHaveBeenCalled();
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "updated",
+          entityType: "refund_request",
+          changes: [{ field: "status", oldValue: "pending", newValue: "rejected" }],
+        }),
+      }),
+    );
   });
 });
 

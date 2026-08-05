@@ -13,6 +13,7 @@ import {
 } from "@/lib/cost-cascade";
 import { computeTotalWithVat, roundToWholeBaht } from "@/lib/money-formulas";
 import { resolveStockDeficitPolicy, StockDeficitBlockedError } from "@/lib/stock-deficit-policy";
+import { recordAuditLog, snapshotFields } from "@/lib/audit-log";
 import { checkoutSchema, CheckoutInput } from "../schemas/pos.schema";
 
 async function getActor() {
@@ -26,6 +27,7 @@ async function getActor() {
 
 interface ResolvedLine {
   menuId: string;
+  menuName: string;
   menuVariantId: string | null;
   quantity: number;
   unitPrice: number;
@@ -146,6 +148,7 @@ async function resolveCartLine(
 
   return {
     menuId: menu.id,
+    menuName: menu.name,
     menuVariantId: variant?.id ?? null,
     quantity: item.quantity,
     unitPrice,
@@ -273,6 +276,29 @@ export async function checkout(input: CheckoutInput) {
             });
           }
         }
+
+        // One summary entry for the whole sale, not one per line/ingredient —
+        // the line items themselves are already permanent
+        // (SalesTransactionItem) and the stock deduction already gets its own
+        // InventoryMovement row below, same reasoning as skipping per-item
+        // logs on purchase-order receiving.
+        await recordAuditLog(tx, {
+          branchId: branch.id,
+          actorId: actor.id,
+          actorName: actor.fullName,
+          action: "created",
+          entityType: "sale",
+          entityId: transaction.id,
+          entityName: `บิลขาย #${transaction.id.slice(0, 8)} — ${resolvedLines.map((l) => `${l.menuName} x${l.quantity}`).join(", ")}`,
+          changes: snapshotFields(
+            {
+              paymentMethod: result.data.paymentMethod,
+              itemCount: resolvedLines.length,
+              totalAmount: totalAmount.toString(),
+            },
+            ["paymentMethod", "itemCount", "totalAmount"],
+          ),
+        });
 
         for (const [ingredientId, quantity] of totalConsumption) {
           const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: ingredientId } });

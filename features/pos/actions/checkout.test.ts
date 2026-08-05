@@ -50,6 +50,7 @@ function actorRow(role: string) {
 // wiring (tax invoice numbering, stock deficit policy), not re-deriving cost.
 const menuFixture = {
   id: "menu-1",
+  name: "ชาไทยเย็น",
   recipeId: "recipe-1",
   basePrice: 35,
   recipe: {
@@ -101,6 +102,22 @@ describe("checkout", () => {
     prismaMock.ingredient.findUniqueOrThrow.mockResolvedValue(ingredientFixture as never);
     prismaMock.inventoryMovement.create.mockResolvedValue({} as never);
     prismaMock.ingredient.update.mockResolvedValue({} as never);
+    prismaMock.auditLog.create.mockResolvedValue({} as never);
+  });
+
+  it("records a created audit log entry summarizing the sale", async () => {
+    const result = await checkout(baseCheckoutInput());
+
+    expect(result.success).toBe(true);
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "created",
+          entityType: "sale",
+          entityId: "sale-1",
+        }),
+      }),
+    );
   });
 
   it("D16: does not consume a tax invoice number when the shop is not VAT-registered", async () => {

@@ -26,6 +26,9 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   company_settings: "ตั้งค่าระบบ",
   tax_settings: "ตั้งค่าภาษี/คืนเงิน",
   reason_code: "รหัสเหตุผล",
+  sale: "บิลขาย",
+  sale_void: "ยกเลิกบิล",
+  refund_request: "คำขอคืนเงิน",
 };
 
 export default async function HistoryPage() {

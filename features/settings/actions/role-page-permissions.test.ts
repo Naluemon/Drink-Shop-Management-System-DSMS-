@@ -10,6 +10,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
+import { PAGE_KEYS, NON_OWNER_ROLES } from "@/lib/page-access";
 import {
   listRolePagePermissions,
   updateRolePagePermissions,
@@ -66,7 +67,10 @@ describe("listRolePagePermissions", () => {
     const result = await listRolePagePermissions();
 
     if ("error" in result) throw new Error("expected rows, got error");
-    expect(result.rows).toHaveLength(5 * 13);
+    // One row per (non-owner role, pageKey) — derived from the live tables
+    // rather than a hardcoded count, so this doesn't silently drift out of
+    // sync whenever a page key is added or removed (see lib/page-access.ts).
+    expect(result.rows).toHaveLength(NON_OWNER_ROLES.length * PAGE_KEYS.length);
     expect(result.rows.find((r) => r.role === "cashier" && r.pageKey === "pos")?.allowed).toBe(
       true,
     );

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
+import { recordAuditLog, snapshotFields, diffFields } from "@/lib/audit-log";
 import {
   modifierGroupSchema,
   ModifierGroupInput,
@@ -95,6 +96,17 @@ export async function createModifierGroup(input: ModifierGroupInput) {
     },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "modifier_group",
+    entityId: group.id,
+    entityName: group.name,
+    changes: snapshotFields(group, ["name", "selectionType", "isRequired"]),
+  });
+
   return { success: true, group };
 }
 
@@ -133,6 +145,20 @@ export async function updateModifierGroup(id: string, input: ModifierGroupInput)
     },
   });
 
+  const changes = diffFields(current, result.data, ["name", "selectionType", "isRequired"]);
+  if (changes.length > 0) {
+    await recordAuditLog(prisma, {
+      branchId: current.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "modifier_group",
+      entityId: id,
+      entityName: result.data.name,
+      changes,
+    });
+  }
+
   return { success: true };
 }
 
@@ -146,7 +172,21 @@ export async function softDeleteModifierGroup(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบกลุ่มตัวเลือก") };
   }
 
+  const current = await prisma.modifierGroup.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบกลุ่มตัวเลือก" };
+
   await prisma.modifierGroup.update({ where: { id }, data: { deletedAt: new Date() } });
+
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "modifier_group",
+    entityId: id,
+    entityName: current.name,
+  });
+
   return { success: true };
 }
 
@@ -162,6 +202,9 @@ export async function addModifier(modifierGroupId: string, input: ModifierInput)
 
   const result = modifierSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
+
+  const group = await prisma.modifierGroup.findUnique({ where: { id: modifierGroupId } });
+  if (!group) return { error: "ไม่พบกลุ่มตัวเลือก" };
 
   const existingModifier = await prisma.modifier.findFirst({
     where: {
@@ -181,6 +224,25 @@ export async function addModifier(modifierGroupId: string, input: ModifierInput)
       priceDelta: result.data.priceDelta,
     },
     include: { ingredient: true },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: group.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "modifier",
+    entityId: modifier.id,
+    entityName: `${group.name} — ${modifier.name}`,
+    changes: snapshotFields(
+      {
+        name: modifier.name,
+        ingredientName: modifier.ingredient?.name ?? null,
+        ingredientQuantity: modifier.ingredientQuantity?.toString() ?? null,
+        priceDelta: modifier.priceDelta.toString(),
+      },
+      ["name", "ingredientName", "ingredientQuantity", "priceDelta"],
+    ),
   });
 
   return {
@@ -207,6 +269,23 @@ export async function removeModifier(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขกลุ่มตัวเลือก") };
   }
 
+  const current = await prisma.modifier.findUnique({
+    where: { id },
+    include: { modifierGroup: true },
+  });
+  if (!current) return { error: "ไม่พบตัวเลือก" };
+
   await prisma.modifier.update({ where: { id }, data: { deletedAt: new Date() } });
+
+  await recordAuditLog(prisma, {
+    branchId: current.modifierGroup.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "modifier",
+    entityId: id,
+    entityName: `${current.modifierGroup.name} — ${current.name}`,
+  });
+
   return { success: true };
 }

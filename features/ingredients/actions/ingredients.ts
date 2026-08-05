@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateDefaultBranch } from "@/lib/default-branch";
 import { recordStockIn } from "@/features/inventory/actions/inventory";
+import { recordAuditLog, snapshotFields, diffFields } from "@/lib/audit-log";
 import {
   ingredientSchema,
   IngredientInput,
@@ -158,6 +159,27 @@ export async function createIngredient(input: IngredientInput) {
     include: { unitConversions: true },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "ingredient",
+    entityId: ingredient.id,
+    entityName: finalIngredient.name,
+    changes: snapshotFields(
+      { ...finalIngredient, costPerUnit: finalIngredient.costPerUnit.toString() },
+      [
+        "name",
+        "baseUnit",
+        "costPerUnit",
+        "lowStockThreshold",
+        "shelfLifeDaysAfterOpening",
+        "supplierId",
+      ],
+    ),
+  });
+
   return {
     success: true,
     ingredient: finalIngredient,
@@ -192,7 +214,7 @@ export async function updateIngredient(id: string, input: IngredientInput) {
   });
   if (existing) return { error: "มีวัตถุดิบชื่อนี้อยู่แล้ว" };
 
-  await prisma.ingredient.update({
+  const updated = await prisma.ingredient.update({
     where: { id },
     data: {
       name: result.data.name,
@@ -211,6 +233,31 @@ export async function updateIngredient(id: string, input: IngredientInput) {
       updatedBy: actor.id,
     },
   });
+
+  const changes = diffFields(
+    { ...current, costPerUnit: current.costPerUnit.toString() },
+    { ...updated, costPerUnit: updated.costPerUnit.toString() },
+    [
+      "name",
+      "baseUnit",
+      "costPerUnit",
+      "lowStockThreshold",
+      "shelfLifeDaysAfterOpening",
+      "supplierId",
+    ],
+  );
+  if (changes.length > 0) {
+    await recordAuditLog(prisma, {
+      branchId: current.branchId,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "ingredient",
+      entityId: id,
+      entityName: updated.name,
+      changes,
+    });
+  }
 
   return { success: true };
 }
@@ -233,9 +280,21 @@ export async function markIngredientOpened(id: string) {
     return { error: "วัตถุดิบนี้ยังไม่ได้ตั้งค่าอายุการใช้งานหลังเปิด" };
   }
 
+  const openedAt = new Date();
   await prisma.ingredient.update({
     where: { id },
-    data: { openedAt: new Date(), updatedBy: actor.id },
+    data: { openedAt, updatedBy: actor.id },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "updated",
+    entityType: "ingredient",
+    entityId: id,
+    entityName: current.name,
+    changes: diffFields({ openedAt: current.openedAt }, { openedAt }, ["openedAt"]),
   });
 
   return { success: true };
@@ -260,6 +319,17 @@ export async function clearIngredientOpened(id: string) {
     data: { openedAt: null, updatedBy: actor.id },
   });
 
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "updated",
+    entityType: "ingredient",
+    entityId: id,
+    entityName: current.name,
+    changes: diffFields({ openedAt: current.openedAt }, { openedAt: null }, ["openedAt"]),
+  });
+
   return { success: true };
 }
 
@@ -274,9 +344,22 @@ export async function softDeleteIngredient(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบวัตถุดิบ") };
   }
 
+  const current = await prisma.ingredient.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบวัตถุดิบ" };
+
   await prisma.ingredient.update({
     where: { id },
     data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: current.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "ingredient",
+    entityId: id,
+    entityName: current.name,
   });
 
   return { success: true };
@@ -296,12 +379,32 @@ export async function addUnitConversion(ingredientId: string, input: UnitConvers
   const result = unitConversionSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
+  const ingredient = await prisma.ingredient.findUnique({ where: { id: ingredientId } });
+  if (!ingredient) return { error: "ไม่พบวัตถุดิบ" };
+
   const conversion = await prisma.unitConversion.create({
     data: {
       ingredientId,
       purchaseUnitName: result.data.purchaseUnitName,
       conversionFactor: result.data.conversionFactor,
     },
+  });
+
+  await recordAuditLog(prisma, {
+    branchId: ingredient.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "unit_conversion",
+    entityId: conversion.id,
+    entityName: `${ingredient.name} — ${conversion.purchaseUnitName}`,
+    changes: snapshotFields(
+      {
+        purchaseUnitName: conversion.purchaseUnitName,
+        conversionFactor: conversion.conversionFactor.toString(),
+      },
+      ["purchaseUnitName", "conversionFactor"],
+    ),
   });
 
   return { success: true, conversion };
@@ -317,6 +420,23 @@ export async function deleteUnitConversion(id: string) {
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์แก้ไขวัตถุดิบ") };
   }
 
+  const current = await prisma.unitConversion.findUnique({
+    where: { id },
+    include: { ingredient: true },
+  });
+  if (!current) return { error: "ไม่พบหน่วยซื้อ" };
+
   await prisma.unitConversion.delete({ where: { id } });
+
+  await recordAuditLog(prisma, {
+    branchId: current.ingredient.branchId,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "unit_conversion",
+    entityId: id,
+    entityName: `${current.ingredient.name} — ${current.purchaseUnitName}`,
+  });
+
   return { success: true };
 }

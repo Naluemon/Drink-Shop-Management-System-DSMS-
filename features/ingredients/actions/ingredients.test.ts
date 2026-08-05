@@ -22,6 +22,10 @@ import {
   markIngredientOpened,
   clearIngredientOpened,
   createIngredient,
+  updateIngredient,
+  softDeleteIngredient,
+  addUnitConversion,
+  deleteUnitConversion,
   listIngredients,
   listSuppliers,
 } from "./ingredients";
@@ -42,8 +46,13 @@ function actorRow(role: string) {
 function ingredientRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "ing-1",
+    branchId: "branch-1",
     name: "ผงชาไทย",
+    baseUnit: "gram",
+    costPerUnit: { toString: () => "20" },
+    lowStockThreshold: null,
     shelfLifeDaysAfterOpening: 7,
+    supplierId: null,
     openedAt: null,
     ...overrides,
   };
@@ -53,6 +62,7 @@ beforeEach(() => {
   mockReset(prismaMock);
   getUser.mockReset();
   getUser.mockResolvedValue({ data: { user: { id: "actor-1" } } });
+  prismaMock.auditLog.create.mockResolvedValue({} as never);
 });
 
 describe("markIngredientOpened", () => {
@@ -221,6 +231,107 @@ describe("createIngredient", () => {
     expect(result.ingredient!.unitConversions).toEqual([
       { id: "uc-1", purchaseUnitName: "กล่อง 946ml", conversionFactor: 12 },
     ]);
+  });
+});
+
+describe("updateIngredient", () => {
+  const baseInput = {
+    name: "ผงชาไทย",
+    baseUnit: "gram" as const,
+    costPerUnit: 25,
+    lowStockThreshold: "" as const,
+    shelfLifeDaysAfterOpening: "" as const,
+    supplierId: "",
+  };
+
+  it("records an updated audit log entry with the old->new diff", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.ingredient.findUnique.mockResolvedValue(
+      ingredientRow({ costPerUnit: { toString: () => "20" } }) as never,
+    );
+    prismaMock.ingredient.findFirst.mockResolvedValue(null as never);
+    prismaMock.ingredient.update.mockResolvedValue(
+      ingredientRow({ costPerUnit: { toString: () => "25" } }) as never,
+    );
+
+    await updateIngredient("ing-1", baseInput);
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "updated",
+          changes: expect.arrayContaining([
+            { field: "costPerUnit", oldValue: "20", newValue: "25" },
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("does not write a log entry when nothing actually changed", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    const same = ingredientRow({ costPerUnit: { toString: () => "25" } });
+    prismaMock.ingredient.findUnique.mockResolvedValue(same as never);
+    prismaMock.ingredient.findFirst.mockResolvedValue(null as never);
+    prismaMock.ingredient.update.mockResolvedValue(same as never);
+
+    await updateIngredient("ing-1", baseInput);
+
+    expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("softDeleteIngredient", () => {
+  it("records a deleted audit log entry", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.ingredient.findUnique.mockResolvedValue(ingredientRow() as never);
+    prismaMock.ingredient.update.mockResolvedValue({} as never);
+
+    await softDeleteIngredient("ing-1");
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "deleted", entityType: "ingredient" }),
+      }),
+    );
+  });
+});
+
+describe("addUnitConversion / deleteUnitConversion", () => {
+  it("addUnitConversion records a created audit log entry", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.ingredient.findUnique.mockResolvedValue(ingredientRow() as never);
+    prismaMock.unitConversion.create.mockResolvedValue({
+      id: "uc-1",
+      purchaseUnitName: "กล่อง 946ml",
+      conversionFactor: { toString: () => "12" },
+    } as never);
+
+    await addUnitConversion("ing-1", { purchaseUnitName: "กล่อง 946ml", conversionFactor: 12 });
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "created", entityType: "unit_conversion" }),
+      }),
+    );
+  });
+
+  it("deleteUnitConversion records a deleted audit log entry", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.unitConversion.findUnique.mockResolvedValue({
+      id: "uc-1",
+      purchaseUnitName: "กล่อง 946ml",
+      ingredient: ingredientRow(),
+    } as never);
+    prismaMock.unitConversion.delete.mockResolvedValue({} as never);
+
+    await deleteUnitConversion("uc-1");
+
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "deleted", entityType: "unit_conversion" }),
+      }),
+    );
   });
 });
 

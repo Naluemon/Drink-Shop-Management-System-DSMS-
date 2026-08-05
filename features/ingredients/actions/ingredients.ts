@@ -40,8 +40,14 @@ export async function listIngredients(filters?: { search?: string; supplierId?: 
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ดูรายการวัตถุดิบ") };
   }
 
+  // createIngredient already scopes writes to the actor's branch (DATABASE.md
+  // §2) — this read side was missing the same scoping, so any organization
+  // could see every other organization's ingredients.
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
+
   const ingredients = await prisma.ingredient.findMany({
     where: {
+      branchId: branch.id,
       deletedAt: null,
       ...(filters?.search ? { name: { contains: filters.search, mode: "insensitive" } } : {}),
       ...(filters?.supplierId ? { supplierId: filters.supplierId } : {}),
@@ -56,8 +62,13 @@ export async function listIngredients(filters?: { search?: string; supplierId?: 
 export async function listSuppliers() {
   const actor = await getActor();
   if (!actor) return { error: "กรุณาล็อกอินก่อน" };
+
+  // Same cross-tenant leak as listIngredients above — scope to the actor's
+  // branch instead of returning every organization's suppliers.
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
+
   const suppliers = await prisma.supplier.findMany({
-    where: { deletedAt: null },
+    where: { branchId: branch.id, deletedAt: null },
     orderBy: { name: "asc" },
   });
   return { suppliers };

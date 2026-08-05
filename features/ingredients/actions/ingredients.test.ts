@@ -18,7 +18,13 @@ vi.mock("@/lib/default-branch", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
-import { markIngredientOpened, clearIngredientOpened, createIngredient } from "./ingredients";
+import {
+  markIngredientOpened,
+  clearIngredientOpened,
+  createIngredient,
+  listIngredients,
+  listSuppliers,
+} from "./ingredients";
 
 const prismaMock = prisma as unknown as ReturnType<typeof mockDeep<PrismaClient>>;
 
@@ -102,6 +108,38 @@ describe("markIngredientOpened", () => {
       expect.objectContaining({
         where: { id: "ing-1" },
         data: expect.objectContaining({ openedAt: expect.any(Date) }),
+      }),
+    );
+  });
+});
+
+describe("listIngredients / listSuppliers", () => {
+  beforeEach(() => {
+    prismaMock.user.findUnique.mockResolvedValue(actorRow("owner") as never);
+    prismaMock.ingredient.findMany.mockResolvedValue([] as never);
+    prismaMock.supplier.findMany.mockResolvedValue([] as never);
+  });
+
+  // Regression test: both queries used to filter only on `deletedAt: null`
+  // with no branchId/organization scoping at all — every organization could
+  // see every other organization's ingredients, while createIngredient
+  // (writes) already scoped correctly by branch. See DATABASE.md §2.
+  it("listIngredients scopes the query to the actor's branch", async () => {
+    await listIngredients();
+
+    expect(prismaMock.ingredient.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ branchId: "branch-1" }),
+      }),
+    );
+  });
+
+  it("listSuppliers scopes the query to the actor's branch", async () => {
+    await listSuppliers();
+
+    expect(prismaMock.supplier.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ branchId: "branch-1" }),
       }),
     );
   });

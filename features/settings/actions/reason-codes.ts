@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { STOCK_OUT_REASON_CODES } from "@/features/inventory/constants/reason-codes";
+import { getOrCreateDefaultBranch } from "@/lib/default-branch";
+import { recordAuditLog, snapshotFields, diffFields } from "@/lib/audit-log";
 import {
   reasonCodeSchema,
   ReasonCodeInput,
@@ -114,6 +116,18 @@ export async function createReasonCode(
     },
   });
 
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "created",
+    entityType: "reason_code",
+    entityId: code.id,
+    entityName: `${code.code} — ${code.label}`,
+    changes: snapshotFields(code, ["code", "label", "isActive"]),
+  });
+
   return {
     success: true,
     code: { id: code.id, code: code.code, label: code.label, isActive: code.isActive },
@@ -136,10 +150,32 @@ export async function updateReasonCode(
   const result = reasonCodeUpdateSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
+  const current = await prisma.reasonCode.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบเหตุผล" };
+
   await prisma.reasonCode.update({
     where: { id },
     data: { label: result.data.label, isActive: result.data.isActive, updatedBy: actor.id },
   });
+
+  const changes = diffFields(
+    current,
+    { label: result.data.label, isActive: result.data.isActive },
+    ["label", "isActive"],
+  );
+  if (changes.length > 0) {
+    const branch = await getOrCreateDefaultBranch(actor.organizationId);
+    await recordAuditLog(prisma, {
+      branchId: branch.id,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "reason_code",
+      entityId: id,
+      entityName: `${current.code} — ${result.data.label}`,
+      changes,
+    });
+  }
 
   return { success: true };
 }
@@ -158,9 +194,23 @@ export async function softDeleteReasonCode(
     return { error: permissionErrorMessage(e, "คุณไม่มีสิทธิ์ลบเหตุผล") };
   }
 
+  const current = await prisma.reasonCode.findUnique({ where: { id } });
+  if (!current) return { error: "ไม่พบเหตุผล" };
+
   await prisma.reasonCode.update({
     where: { id },
     data: { deletedAt: new Date(), updatedBy: actor.id },
+  });
+
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "deleted",
+    entityType: "reason_code",
+    entityId: id,
+    entityName: `${current.code} — ${current.label}`,
   });
 
   return { success: true };

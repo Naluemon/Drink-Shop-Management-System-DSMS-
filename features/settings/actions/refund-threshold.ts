@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission, PermissionError } from "@/lib/permissions";
 import { getOrCreateTaxSettings } from "@/lib/settings";
+import { getOrCreateDefaultBranch } from "@/lib/default-branch";
+import { recordAuditLog, diffFields } from "@/lib/audit-log";
 
 async function getActor() {
   const supabase = await createClient();
@@ -58,6 +60,25 @@ export async function updateRefundApprovalThreshold(formData: FormData) {
     where: { id: settings.id },
     data: { refundApprovalThreshold: result.data.threshold },
   });
+
+  const changes = diffFields(
+    { refundApprovalThreshold: settings.refundApprovalThreshold.toString() },
+    { refundApprovalThreshold: result.data.threshold.toString() },
+    ["refundApprovalThreshold"],
+  );
+  if (changes.length > 0) {
+    const branch = await getOrCreateDefaultBranch(actor.organizationId);
+    await recordAuditLog(prisma, {
+      branchId: branch.id,
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "updated",
+      entityType: "tax_settings",
+      entityId: settings.id,
+      entityName: "เกณฑ์อนุมัติคืนเงิน",
+      changes,
+    });
+  }
 
   return { success: true, message: "บันทึกสำเร็จ" };
 }

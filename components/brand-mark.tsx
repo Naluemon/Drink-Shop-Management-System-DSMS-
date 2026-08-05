@@ -4,18 +4,21 @@ interface BrandIconProps {
   className?: string;
 }
 
-// The cup glyph: a takeaway cup silhouette holding the shop's actual
-// signature drink — ชาไทยเย็น (Thai iced tea) — rendered as two translucency
-// bands (steeped tea on top, milk settling underneath) with a marbled swirl
-// where they meet, plus ice cubes resting above the rim. Grounded in the
-// real reference recipe (TESTING.md §2.2) rather than a generic cup-with-steam
-// mark — steam would misread the drink as hot, so ice is the honest signal.
-// Shared by the full lockup below and the compact nav-bar mark.
+// "Sunrise Cup" — flat geometric takeaway cup with a straw and three boba
+// pearls, on a fixed pink-orange-yellow gradient (not tied to the
+// light/dark --primary/--accent tokens, unlike the rest of the UI — a brand
+// mark should read the same regardless of theme, the way a logo normally
+// would). Replaced the earlier photorealistic tea/milk-layer cup: that one
+// used the app's earthy primary/accent palette and read as muted rather than
+// distinctive. Straw and pearls are drawn in translucent white (currentColor
+// at partial opacity) rather than a second gradient fill, so the background
+// gradient shows through — same layering trick the old icon used for its
+// tea/milk bands, just applied to different shapes.
 export function BrandIcon({ className }: BrandIconProps) {
   return (
     <div
       className={cn(
-        "from-primary to-accent ring-primary/15 flex items-center justify-center rounded-2xl bg-gradient-to-br shadow-lg ring-1",
+        "flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#FF5E7E] via-[#FF9040] to-[#FFD23F] shadow-lg ring-1 ring-[#FF5E7E]/20",
         className,
       )}
     >
@@ -25,42 +28,35 @@ export function BrandIcon({ className }: BrandIconProps) {
         className="h-[58%] w-[58%] text-white"
         aria-hidden="true"
       >
-        {/* tea layer */}
-        <path d="M5.7 4.6 17.5 4.6 15.3 12 Q11.5 14 7.9 12 Z" fill="currentColor" opacity="0.9" />
-        {/* milk layer, separated from the tea by the marbled swirl line */}
+        {/* cup body */}
         <path
-          d="M7.9 12 Q11.5 14 15.3 12 L13.6 17.6 Q13.2 18.3 12.4 18.3H10.6 Q9.8 18.3 9.5 17.6 Z"
+          d="M6.8 6.8h10.4l-1.4 11.6a2 2 0 0 1-2 1.8h-3.6a2 2 0 0 1-2-1.8Z"
           fill="currentColor"
-          opacity="0.4"
+          opacity="0.92"
         />
-        {/* cup outline, drawn last so it cleanly caps both fill layers */}
+        {/* liquid level line, translucent so the gradient reads through */}
         <path
-          d="M5 3.5h13.2a.8.8 0 0 1 .79.9l-1.36 10.9A4 4 0 0 1 13.66 19H9.34a4 4 0 0 1-3.97-3.7L4 4.4a.8.8 0 0 1 .79-.9Z"
+          d="M7.6 12.4h8.8l-0.64 5.48a1.4 1.4 0 0 1-1.4 1.32H9.64a1.4 1.4 0 0 1-1.4-1.32Z"
+          fill="currentColor"
+          opacity="0.22"
+        />
+        {/* lid */}
+        <rect x="6" y="5.2" width="12" height="2.4" rx="1.2" fill="currentColor" />
+        {/* straw, pierced through the lid */}
+        <line
+          x1="15.8"
+          y1="2.4"
+          x2="12.6"
+          y2="8"
           stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          opacity="0.92"
         />
-        {/* ice cubes peeking above the rim */}
-        <rect
-          x="7.3"
-          y="1.1"
-          width="2.6"
-          height="2.6"
-          rx="0.5"
-          fill="currentColor"
-          opacity="0.85"
-          transform="rotate(-12 8.6 2.4)"
-        />
-        <rect
-          x="12.4"
-          y="0.6"
-          width="2.3"
-          height="2.3"
-          rx="0.5"
-          fill="currentColor"
-          opacity="0.7"
-          transform="rotate(10 13.55 1.75)"
-        />
+        {/* boba pearls */}
+        <circle cx="9.8" cy="9.2" r="1" fill="currentColor" />
+        <circle cx="12" cy="10" r="1" fill="currentColor" />
+        <circle cx="14" cy="9" r="1" fill="currentColor" />
       </svg>
     </div>
   );

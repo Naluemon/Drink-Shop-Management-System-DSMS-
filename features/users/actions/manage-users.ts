@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { requirePermission, PermissionError } from "@/lib/permissions";
+import { getOrCreateDefaultBranch } from "@/lib/default-branch";
+import { recordAuditLog, diffFields } from "@/lib/audit-log";
 import type { UserRole } from "@/lib/generated/prisma/enums";
 
 const VALID_ROLES: readonly UserRole[] = [
@@ -62,9 +64,22 @@ export async function toggleUserActive(targetUserId: string) {
   const target = await prisma.user.findUnique({ where: { id: targetUserId } });
   if (!target) return { error: "ไม่พบผู้ใช้" };
 
+  const nextActive = !target.isActive;
   await prisma.user.update({
     where: { id: targetUserId },
-    data: { isActive: !target.isActive },
+    data: { isActive: nextActive },
+  });
+
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "updated",
+    entityType: "user",
+    entityId: targetUserId,
+    entityName: target.fullName,
+    changes: diffFields({ isActive: target.isActive }, { isActive: nextActive }, ["isActive"]),
   });
 
   return { success: true };
@@ -99,6 +114,18 @@ export async function updateUserRole(targetUserId: string, newRole: string) {
   await prisma.user.update({
     where: { id: targetUserId },
     data: { role: newRole as UserRole },
+  });
+
+  const branch = await getOrCreateDefaultBranch(actor.organizationId);
+  await recordAuditLog(prisma, {
+    branchId: branch.id,
+    actorId: actor.id,
+    actorName: actor.fullName,
+    action: "updated",
+    entityType: "user",
+    entityId: targetUserId,
+    entityName: target.fullName,
+    changes: diffFields({ role: target.role }, { role: newRole }, ["role"]),
   });
 
   return { success: true };

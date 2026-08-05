@@ -13,18 +13,31 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({ auth: { getUser } })),
 }));
 
+vi.mock("@/lib/default-branch", () => ({
+  getOrCreateDefaultBranch: vi.fn(async () => ({ id: "branch-1" })),
+}));
+
 import { prisma } from "@/lib/prisma";
 import { listUsers, toggleUserActive, updateUserRole } from "./manage-users";
 
 const prismaMock = prisma as unknown as ReturnType<typeof mockDeep<PrismaClient>>;
 
 function actor(id: string, role: string, overrides: Record<string, unknown> = {}) {
-  return { id, role, fullName: "x", email: "x@b.com", isActive: true, ...overrides };
+  return {
+    id,
+    role,
+    fullName: "x",
+    email: "x@b.com",
+    isActive: true,
+    organizationId: "org-1",
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
   mockReset(prismaMock);
   getUser.mockReset();
+  prismaMock.auditLog.create.mockResolvedValue({} as never);
 });
 
 describe("listUsers", () => {
@@ -120,6 +133,16 @@ describe("toggleUserActive", () => {
       data: { isActive: false },
     });
     expect(result.success).toBe(true);
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "updated",
+          entityType: "user",
+          entityId: "u-2",
+          changes: [{ field: "isActive", oldValue: true, newValue: false }],
+        }),
+      }),
+    );
   });
 });
 
@@ -168,5 +191,15 @@ describe("updateUserRole", () => {
       data: { role: "shift_supervisor" },
     });
     expect(result.success).toBe(true);
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "updated",
+          entityType: "user",
+          entityId: "u-2",
+          changes: [{ field: "role", oldValue: "cashier", newValue: "shift_supervisor" }],
+        }),
+      }),
+    );
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { listAuditLogs, type AuditLogRow } from "../actions/history";
 import { HistoryDetailDialog } from "./history-detail-dialog";
 import { SearchInput } from "@/components/search-input";
@@ -20,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DEFAULT_PAGE_SIZE, buildPageSequence, getSkip } from "@/lib/pagination";
 
 const ACTION_LABELS: Record<AuditLogRow["action"], string> = {
   created: "เพิ่ม",
@@ -124,6 +126,7 @@ export function HistoryList({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">ลำดับ</TableHead>
             <TableHead>วันที่/เวลา</TableHead>
             <TableHead>ผู้ทำรายการ</TableHead>
             <TableHead>การกระทำ</TableHead>
@@ -135,13 +138,16 @@ export function HistoryList({
         <TableBody>
           {logs.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-muted-foreground text-center">
+              <TableCell colSpan={7} className="text-muted-foreground text-center">
                 ไม่พบประวัติ
               </TableCell>
             </TableRow>
           ) : (
-            logs.map((log) => (
+            logs.map((log, index) => (
               <TableRow key={log.id}>
+                <TableCell className="text-muted-foreground">
+                  {getSkip(page, DEFAULT_PAGE_SIZE) + index + 1}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {new Date(log.createdAt).toLocaleString("th-TH")}
                 </TableCell>
@@ -161,26 +167,51 @@ export function HistoryList({
         </TableBody>
       </Table>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-muted-foreground text-sm">
           หน้า {page} จาก {totalPages}
         </p>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1.5">
           <Button
             variant="outline"
             size="sm"
+            className="size-8 p-0"
+            aria-label="หน้าก่อนหน้า"
             disabled={isPending || page <= 1}
             onClick={() => refetch(page - 1)}
           >
-            ก่อนหน้า
+            <ChevronLeft />
           </Button>
+
+          {buildPageSequence(page, totalPages).map((p, i) =>
+            p === null ? (
+              <span key={`ellipsis-${i}`} className="text-muted-foreground px-1 text-sm">
+                …
+              </span>
+            ) : (
+              <Button
+                key={p}
+                variant={p === page ? "default" : "outline"}
+                size="sm"
+                className="size-8 p-0"
+                aria-current={p === page ? "page" : undefined}
+                disabled={isPending}
+                onClick={() => refetch(p)}
+              >
+                {p}
+              </Button>
+            ),
+          )}
+
           <Button
             variant="outline"
             size="sm"
+            className="size-8 p-0"
+            aria-label="หน้าถัดไป"
             disabled={isPending || page >= totalPages}
             onClick={() => refetch(page + 1)}
           >
-            ถัดไป
+            <ChevronRight />
           </Button>
         </div>
       </div>

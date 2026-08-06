@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { buildPageSequence } from "@/lib/pagination";
 
 interface PaginationControlsProps {
   page: number;
@@ -24,22 +25,6 @@ function buildHref(
   }
   params.set("page", String(page));
   return `${basePath}?${params.toString()}`;
-}
-
-// Builds the visible page-number sequence with `null` standing in for an
-// ellipsis — always shows page 1, the last page, and a window of 2 pages on
-// either side of the current page, so long lists don't render one link per
-// page.
-function buildPageSequence(page: number, totalPages: number): (number | null)[] {
-  const pages = new Set<number>([1, totalPages, page - 1, page, page + 1]);
-  const sorted = [...pages].filter((p) => p >= 1 && p <= totalPages).sort((a, b) => a - b);
-
-  const result: (number | null)[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    if (i > 0 && sorted[i] - sorted[i - 1] > 1) result.push(null);
-    result.push(sorted[i]);
-  }
-  return result;
 }
 
 // Server-renderable (no client JS needed) — plain links carry the page

@@ -118,7 +118,13 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - icon, apple-icon, manifest.webmanifest (app/icon.tsx, app/apple-icon.tsx,
+     *   app/icon-192, app/icon-512, app/manifest.ts — dynamically generated, so
+     *   they don't end in a file extension the pattern below would catch. A
+     *   phone fetching these to build the "Add to Home Screen" icon has no
+     *   session, so without this exclusion every request 307s to /login and
+     *   the OS gets an HTML redirect instead of image bytes.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon|apple-icon|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

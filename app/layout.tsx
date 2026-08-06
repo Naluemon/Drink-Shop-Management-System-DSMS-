@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Kanit, IBM_Plex_Sans_Thai, IBM_Plex_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
@@ -28,6 +28,17 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "DSMS — ระบบจัดการร้านเครื่องดื่ม",
   description: "ระบบบริหารจัดการร้านเครื่องดื่มแบบครบวงจร: ต้นทุน, POS, สต็อก, และรายงาน",
+  // Home-screen shortcut launches fullscreen (no browser chrome) with this
+  // title, instead of just bookmarking the current URL in a Safari tab.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "DSMS",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#FF9040",
 };
 
 export default function RootLayout({
